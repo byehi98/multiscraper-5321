@@ -16,9 +16,13 @@ async function getTMDBTitle(tmdbId, mediaType) {
 
 async function scrapeProvider(provider, title, episodeNum, providerName) {
     try {
+        console.log(`[Consumet | ${providerName}] Searching: ${title}`);
         const search = await provider.search(title);
         
-        if (!search.results || search.results.length === 0) return [];
+        if (!search.results || search.results.length === 0) {
+            console.log(`[Consumet | ${providerName}] No search results found.`);
+            return [];
+        }
         
         const matchId = search.results[0].id;
         
@@ -26,11 +30,18 @@ async function scrapeProvider(provider, title, episodeNum, providerName) {
             ? await provider.fetchAnimeInfo(matchId) 
             : await provider.fetchMediaInfo(matchId);
 
-        if (!info.episodes || info.episodes.length === 0) return [];
+        if (!info.episodes || info.episodes.length === 0) {
+            console.log(`[Consumet | ${providerName}] No episodes found for this match.`);
+            return [];
+        }
 
         const targetEp = info.episodes.find(e => parseInt(e.number) === parseInt(episodeNum));
-        if (!targetEp) return [];
+        if (!targetEp) {
+            console.log(`[Consumet | ${providerName}] Episode ${episodeNum} not found in their list.`);
+            return [];
+        }
 
+        console.log(`[Consumet | ${providerName}] Extracting streams...`);
         const sources = await provider.fetchEpisodeSources(targetEp.id);
         
         const streams = [];
@@ -57,32 +68,49 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         const ANIME = ext.ANIME || ext.default.ANIME;
         const MOVIES = ext.MOVIES || ext.default.MOVIES;
 
-        // Auto-detect HiAnime and DramaCool
-        const animeKey = Object.keys(ANIME).find(k => k.toLowerCase().includes('hianime'));
-        const dramaKey = Object.keys(MOVIES).find(k => k.toLowerCase().includes('drama'));
-
-        if (!animeKey || !dramaKey) {
-            console.log("[Debug] ANIME:", Object.keys(ANIME));
-            console.log("[Debug] MOVIES:", Object.keys(MOVIES));
-            throw new Error("Could not find providers in the library.");
-        }
-
-        console.log(`[Consumet] Auto-detected classes: ${animeKey} & ${dramaKey}`);
-
-        const animeProvider = new ANIME[animeKey]();
-        const dramacool = new MOVIES[dramaKey]();
-
         const title = await getTMDBTitle(tmdbId, mediaType);
         if (!title) return [];
 
-        console.log(`[Consumet] Searching: ${title}`);
+        console.log(`[Consumet] Waterfall Search Triggered for: ${title}`);
 
-        const [animeStreams, dramaStreams] = await Promise.all([
-            scrapeProvider(animeProvider, title, episodeNum, "HiAnime"),
-            scrapeProvider(dramacool, title, episodeNum, "DramaCool")
-        ]);
+        const allStreams = [];
 
-        return [...animeStreams, ...dramaStreams];
+        // Helper function to safely find the exact capitalization of the provider
+        const getKey = (obj, name) => Object.keys(obj).find(k => k.toLowerCase() === name.toLowerCase());
+
+        // --- 1. THE ANIME WATERFALL ---
+        const animeTargets = ['AnimePahe', 'KickAssAnime', 'Hianime', 'AnimeSama'];
+        for (const target of animeTargets) {
+            const key = getKey(ANIME, target);
+            if (key) {
+                const provider = new ANIME[key]();
+                const streams = await scrapeProvider(provider, title, episodeNum, target);
+                
+                if (streams.length > 0) {
+                    console.log(`[Consumet] Success with ${target}! Skipping backup anime providers.`);
+                    allStreams.push(...streams);
+                    break; // Stop searching once we have streams!
+                }
+            }
+        }
+
+        // --- 2. THE DRAMA/MOVIE WATERFALL ---
+        const movieTargets = ['DramaCool', 'FlixHQ', 'SFlix'];
+        for (const target of movieTargets) {
+            const key = getKey(MOVIES, target);
+            if (key) {
+                const provider = new MOVIES[key]();
+                const streams = await scrapeProvider(provider, title, episodeNum, target);
+                
+                if (streams.length > 0) {
+                    console.log(`[Consumet] Success with ${target}! Skipping backup movie providers.`);
+                    allStreams.push(...streams);
+                    break; // Stop searching once we have streams!
+                }
+            }
+        }
+
+        return allStreams;
         
     } catch (err) {
         console.error(`[Consumet] Master Error: ${err.message}`);
