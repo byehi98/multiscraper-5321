@@ -1,4 +1,3 @@
-const consumet = require('./consumet');
 const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const fetch = require("node-fetch");
 const express = require('express');
