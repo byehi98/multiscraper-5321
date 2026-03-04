@@ -14,6 +14,28 @@ async function getTMDBTitle(tmdbId, mediaType) {
     }
 }
 
+// 🚀 The Heat-Seeking Missile: Recursively digs through the library to find the classes
+function findScraperClass(obj, className) {
+    if (!obj) return null;
+    
+    // Check if the current object IS the class
+    if (typeof obj === 'function' && obj.name && obj.name.toLowerCase() === className.toLowerCase()) {
+        return obj;
+    }
+    
+    // Check all properties and sub-properties
+    for (const key in obj) {
+        if (typeof obj[key] === 'function' && obj[key].name && obj[key].name.toLowerCase() === className.toLowerCase()) {
+            return obj[key];
+        }
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+            const found = findScraperClass(obj[key], className);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
 async function scrapeProvider(provider, title, episodeNum, providerName) {
     try {
         console.log(`[Consumet | ${providerName}] Searching: ${title}`);
@@ -57,29 +79,26 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     console.log(`[Consumet] Booting up dynamic extensions...`);
     
     try {
-        // The Master Key: Dynamic import inside the async function avoids all module crashes
         const ext = await import('@consumet/extensions');
         
-        // Auto-detect the object structure depending on the Consumet version
-        const PROVIDERS = ext.PROVIDERS || ext.default?.PROVIDERS || ext;
-        const ANIME = PROVIDERS.ANIME;
-        const MOVIES = PROVIDERS.MOVIES;
-
-        // Extract the classes safely
-        const gogoClass = ANIME.Gogoanime || ANIME.GogoAnime;
-        const dramaClass = MOVIES.Dramacool || MOVIES.DramaCool;
+        // Unleash the missile to find the exact classes automatically
+        const GogoClass = findScraperClass(ext, 'Gogoanime');
+        const DramaClass = findScraperClass(ext, 'Dramacool');
         
-        if (!gogoClass || !dramaClass) throw new Error("Failed to extract scraper classes from library");
+        if (!GogoClass || !DramaClass) {
+            // If it still fails, this will print out the library's structure so we can see exactly what is broken
+            console.log("[Consumet Debug] Library keys available:", Object.keys(ext));
+            throw new Error("Failed to extract scraper classes from library");
+        }
 
-        const gogoanime = new gogoClass();
-        const dramacool = new dramaClass();
+        const gogoanime = new GogoClass();
+        const dramacool = new DramaClass();
 
         const title = await getTMDBTitle(tmdbId, mediaType);
         if (!title) return [];
 
         console.log(`[Consumet] Firing up scrapers for: ${title}`);
 
-        // Run both scrapers at the exact same time
         const [animeStreams, dramaStreams] = await Promise.all([
             scrapeProvider(gogoanime, title, episodeNum, "GogoAnime"),
             scrapeProvider(dramacool, title, episodeNum, "DramaCool")
