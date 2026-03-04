@@ -14,28 +14,6 @@ async function getTMDBTitle(tmdbId, mediaType) {
     }
 }
 
-// 🚀 The Heat-Seeking Missile: Recursively digs through the library to find the classes
-function findScraperClass(obj, className) {
-    if (!obj) return null;
-    
-    // Check if the current object IS the class
-    if (typeof obj === 'function' && obj.name && obj.name.toLowerCase() === className.toLowerCase()) {
-        return obj;
-    }
-    
-    // Check all properties and sub-properties
-    for (const key in obj) {
-        if (typeof obj[key] === 'function' && obj[key].name && obj[key].name.toLowerCase() === className.toLowerCase()) {
-            return obj[key];
-        }
-        if (typeof obj[key] === 'object' && obj[key] !== null) {
-            const found = findScraperClass(obj[key], className);
-            if (found) return found;
-        }
-    }
-    return null;
-}
-
 async function scrapeProvider(provider, title, episodeNum, providerName) {
     try {
         console.log(`[Consumet | ${providerName}] Searching: ${title}`);
@@ -81,18 +59,12 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     try {
         const ext = await import('@consumet/extensions');
         
-        // Unleash the missile to find the exact classes automatically
-        const GogoClass = findScraperClass(ext, 'Gogoanime');
-        const DramaClass = findScraperClass(ext, 'Dramacool');
-        
-        if (!GogoClass || !DramaClass) {
-            // If it still fails, this will print out the library's structure so we can see exactly what is broken
-            console.log("[Consumet Debug] Library keys available:", Object.keys(ext));
-            throw new Error("Failed to extract scraper classes from library");
-        }
+        // Grab them directly from the top level based on our debug log!
+        const ANIME = ext.ANIME || ext.default.ANIME;
+        const MOVIES = ext.MOVIES || ext.default.MOVIES;
 
-        const gogoanime = new GogoClass();
-        const dramacool = new DramaClass();
+        const gogoanime = new ANIME.Gogoanime();
+        const dramacool = new MOVIES.Dramacool();
 
         const title = await getTMDBTitle(tmdbId, mediaType);
         if (!title) return [];
