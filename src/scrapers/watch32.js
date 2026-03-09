@@ -43,38 +43,43 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                 const response = await gotScraping({
                     url: searchUrl,
                     responseType: 'text',
-                    timeout: { request: 8000 } // Bumped up slightly for heavier pages
+                    timeout: { request: 8000 }
                 });
 
                 const $ = cheerio.load(response.body);
                 const pageTitle = $('title').text().toLowerCase();
                 
-                // Cloudflare/Fake Domain check
                 if (pageTitle.includes('just a moment') || pageTitle.includes('cloudflare') || pageTitle.length < 15) {
                     console.log(`[Vegamovies] Hit Cloudflare or Parked Domain on ${domain}. Moving to next...`);
                     continue; 
                 }
 
                 const streams = [];
+                const uniqueLinks = new Set(); // To prevent duplicate streams
 
-                // 🚀 The Expanded Net: Checks for almost every common movie layout structure
-                const searchResults = $('.post-item, article, .blog-item, .post, .item, .movies-list .ml-item, .result-item, .thumb');
+                // ☢️ THE NUKE: Scan every single link on the entire webpage
+                $('a').each((i, element) => {
+                    const linkText = $(element).text().trim();
+                    const linkTitleAttr = $(element).attr('title') || "";
+                    const postLink = $(element).attr('href');
+                    
+                    // If the text or the hover-title contains our movie name, grab it!
+                    if (postLink && (linkText.toLowerCase().includes(title.toLowerCase()) || linkTitleAttr.toLowerCase().includes(title.toLowerCase()))) {
+                        
+                        // Make sure we aren't grabbing generic tag links or duplicates
+                        if (!uniqueLinks.has(postLink) && postLink.includes(domain)) {
+                            uniqueLinks.add(postLink);
+                            
+                            // Use the text it found, or fallback to the movie title
+                            const displayTitle = linkText.length > 3 ? linkText : linkTitleAttr || title;
 
-                searchResults.each((i, element) => {
-                    // Try finding the title through multiple methods (h2, h3, or a direct title attribute)
-                    const titleElement = $(element).find('h2 a, h3 a, .title a, a[title]').first();
-                    const fallbackTitle = $(element).find('a').attr('title'); 
-                    
-                    const postTitle = titleElement.text().trim() || fallbackTitle || "";
-                    const postLink = titleElement.attr('href') || $(element).find('a').first().attr('href');
-                    
-                    if (postTitle && postLink && postTitle.toLowerCase().includes(title.toLowerCase())) {
-                        streams.push({
-                            name: "Vegamovies",
-                            title: `[Web View]\n${postTitle}`,
-                            url: postLink,
-                            behaviorHints: { notWebReady: false } 
-                        });
+                            streams.push({
+                                name: "Vegamovies",
+                                title: `[Web View]\n${displayTitle}`,
+                                url: postLink,
+                                behaviorHints: { notWebReady: false } 
+                            });
+                        }
                     }
                 });
 
@@ -82,14 +87,12 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     console.log(`[Vegamovies] BINGO! Found ${streams.length} matches on ${domain}.`);
                     return streams; 
                 } else {
-                    // 🔍 SPYGLASS 2.0: Print exactly what text the website actually sent us!
-                    const bodySnippet = $('body').text().substring(0, 150).replace(/\s+/g, ' ').trim();
-                    console.log(`[Vegamovies] 0 matches. Site Title: "${$('title').text()}" | Body Snippet: "${bodySnippet}"`);
+                    console.log(`[Vegamovies] 0 matches on ${domain}. Title: "${$('title').text()}"`);
                     continue; 
                 }
 
             } catch (fetchError) {
-                console.log(`[Vegamovies] Domain ${domain} failed to load (Timeout/Offline). Moving to next...`);
+                console.log(`[Vegamovies] Domain ${domain} failed to load. Moving to next...`);
             }
         }
 
