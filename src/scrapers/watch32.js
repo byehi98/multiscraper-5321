@@ -3,17 +3,16 @@ const cheerio = require('cheerio');
 
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
+// Updated with the latest active domains from global web traffic data
 const DOMAINS = [
     "https://vegamovies.hot",
+    "https://vegamovies.uz",
+    "https://vegamovies.video",
+    "https://vegamovies.name",
+    "https://vegamoviese.biz",
+    "https://vegamovies.do",
     "https://vegamovies.yt",
-    "https://vegamovies.pe",
-    "https://vegamovies.am",
-    "https://vegamovies.la",
-    "https://vegamovies.vg",
-    "https://vegamovies.to",
-    "https://vegamovies.is",
-    "https://vegamovies.nl",
-    "https://vegamovies.rsvp"
+    "https://vegamovies.is"
 ];
 
 async function getTMDBTitle(tmdbId, mediaType) {
@@ -39,8 +38,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
             console.log(`[Vegamovies] Trying domain: ${domain} for "${title}"`);
             
             try {
+                // THE FIX: Use SEO-friendly search routing to bypass the blocked /?s= parameter
                 const searchFormat = title.replace(/\s+/g, '+');
-                const searchUrl = `${domain}/?s=${searchFormat}`;
+                const searchUrl = `${domain}/search/${searchFormat}/`;
                 
                 const response = await gotScraping({
                     url: searchUrl,
@@ -56,6 +56,12 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     continue; 
                 }
 
+                // If the title doesn't include our movie or the word "search", it likely redirected to the homepage again
+                if (!pageTitle.includes('search') && !pageTitle.includes(title.toLowerCase())) {
+                    console.log(`[Vegamovies] Search blocked on ${domain} (Redirected to Homepage). Moving to next...`);
+                    continue;
+                }
+
                 const streams = [];
                 const uniqueLinks = new Set(); 
 
@@ -65,20 +71,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     const imgAlt = $(element).find('img').attr('alt') || ""; 
                     let postLink = $(element).attr('href');
                     
-                    // Skip empty or javascript links
                     if (!postLink || postLink === '#' || postLink.startsWith('javascript:')) return;
 
-                    // FIX: Convert relative links (like /movie-name/) to absolute links
                     if (postLink.startsWith('/')) {
                         postLink = domain + postLink;
                     }
                     
                     const allText = `${linkText} ${linkTitleAttr} ${imgAlt} ${postLink}`.toLowerCase();
                     
-                    // FIX: Check if it's an internal link and contains the title
                     if (postLink.startsWith(domain) && allText.includes(title.toLowerCase())) {
                         
-                        // Ignore generic WordPress author/page/tag links
                         if (!uniqueLinks.has(postLink) && !postLink.includes('/page/') && !postLink.includes('/author/')) {
                             uniqueLinks.add(postLink);
                             
@@ -98,7 +100,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     console.log(`[Vegamovies] BINGO! Found ${streams.length} matches on ${domain}.`);
                     return streams; 
                 } else {
-                    console.log(`[Vegamovies] 0 matches on ${domain}. (Maybe movie not on site?)`);
+                    console.log(`[Vegamovies] 0 matches on ${domain}.`);
                     continue; 
                 }
 
