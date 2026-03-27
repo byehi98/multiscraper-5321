@@ -1,24 +1,25 @@
+// Cinevibe Scraper for MultiScraper
+// Refactored to use async/await and got-scraping for stealth API access
+
 const fetch = require('node-fetch');
-// Cinevibe Scraper for Nuvio Local Scrapers
-// React Native compatible version - Promise-based approach
 
 // Constants
 const BASE_URL = 'https://cinevibe.asia';
-const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c'; // Same key used by other providers
+const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
-const USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 const BROWSER_FINGERPRINT = "eyJzY3JlZW4iOiIzNjB4ODA2eDI0Iiwi";
 const SESSION_ENTROPY = "pjght152dw2rb.ssst4bzleDI0Iiwibv78";
 
-// Working headers for Cinevibe requests
-const WORKING_HEADERS = {
-    'Referer': BASE_URL + '/',
-    'User-Agent': USER_AGENT,
-    'X-CV-Fingerprint': BROWSER_FINGERPRINT,
-    'X-CV-Session': SESSION_ENTROPY,
-    'X-Requested-With': 'XMLHttpRequest'
-};
+// Debug helper
+function log(msg, rid, extra) {
+    const prefix = `[Cinevibe]${rid ? `[rid:${rid}]` : ''}`;
+    if (extra !== undefined) {
+        console.log(`${prefix} ${msg}`, extra);
+    } else {
+        console.log(`${prefix} ${msg}`);
+    }
+}
 
 // Utility Functions
 
@@ -49,394 +50,181 @@ function rot13(str) {
     });
 }
 
-/**
- * Base64 encoding helper (using btoa for browser/React Native)
- */
 function base64Encode(str) {
-    try {
-        // For React Native, we need to handle Unicode properly
-        const utf8Bytes = unescape(encodeURIComponent(str));
-        return btoa(utf8Bytes);
-    } catch (error) {
-        console.error('[Cinevibe] Base64 encode error:', error);
-        throw error;
-    }
-}
-
-/**
- * Base64 decoding helper (using atob for browser/React Native)
- */
-function base64Decode(str) {
-    try {
-        const decoded = atob(str);
-        return decodeURIComponent(escape(decoded));
-    } catch (error) {
-        console.error('[Cinevibe] Base64 decode error:', error);
-        throw error;
-    }
+    return Buffer.from(str, 'utf8').toString('base64');
 }
 
 /**
  * Deterministic string obfuscator using layered reversible encodings
- * Equivalent to Python's custom_encode function
  */
 function customEncode(e) {
-    // Step 1: Base64 encode
     let encoded = base64Encode(e);
-    
-    // Step 2: Reverse string
     encoded = encoded.split('').reverse().join('');
-    
-    // Step 3: ROT13 encode
     encoded = rot13(encoded);
-    
-    // Step 4: Base64 encode again
     encoded = base64Encode(encoded);
-    
-    // Step 5: Replace characters
     encoded = encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    
     return encoded;
 }
 
 /**
  * Get movie/TV show details from TMDB
  */
-function getTMDBDetails(tmdbId, mediaType) {
+async function getTMDBDetails(tmdbId, mediaType, rid) {
     const endpoint = mediaType === 'tv' ? 'tv' : 'movie';
     const url = `${TMDB_BASE_URL}/${endpoint}/${tmdbId}?api_key=${TMDB_API_KEY}`;
     
-    console.log(`[Cinevibe] Fetching TMDB details for ${mediaType} ID: ${tmdbId}`);
-    
-    return fetch(url, {
-        method: 'GET',
-        headers: {
-            'User-Agent': USER_AGENT,
-            'Accept': 'application/json'
-        }
-    }).then(function(response) {
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
         if (!response.ok) {
-            throw new Error(`TMDB API error: ${response.status} ${response.statusText}`);
+            throw new Error(`TMDB API error: ${response.status}`);
         }
-        return response.json();
-    }).then(function(data) {
+        const data = await response.json();
         const title = mediaType === 'tv' ? data.name : data.title;
         const releaseDate = mediaType === 'tv' ? data.first_air_date : data.release_date;
         const releaseYear = releaseDate ? releaseDate.split('-')[0] : null;
-        const imdbId = data.imdb_id || null;
-        
-        console.log(`[Cinevibe] TMDB Info: "${title}" (${releaseYear || 'N/A'})`);
         
         return {
             title: title,
-            releaseYear: releaseYear,
-            imdbId: imdbId
+            releaseYear: releaseYear
         };
-    }).catch(function(error) {
-        console.error(`[Cinevibe] TMDB fetch error: ${error.message}`);
-        throw error;
-    });
+    } catch (error) {
+        log(`TMDB fetch error: ${error.message}`, rid);
+        return null;
+    }
 }
 
 /**
  * Generate token for Cinevibe API
  */
-function generateToken(tmdbId, title, releaseYear, mediaType) {
-    // Clean title for token (remove non-alphanumeric chars, lowercase)
+function generateToken(tmdbId, title, releaseYear) {
     const cleanTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
-    // Time-based key: current time in milliseconds divided by 300000 (5 minutes)
     const timeWindow = Math.floor(Date.now() / 300000);
     const timeBasedKey = `${timeWindow}_${BROWSER_FINGERPRINT}_cinevibe_2025`;
-    
-    // Hash the time-based key
     const hashedKey = fnv1a32(timeBasedKey);
-    
-    // Current time in seconds divided by 600 (10 minutes)
-    // Python: int(time.time() // 600) where time.time() is seconds
     const timeStamp = Math.floor(Date.now() / 1000 / 600);
-    
-    // Construct token string
     const tokenString = `${SESSION_ENTROPY}|${tmdbId}|${cleanTitle}|${releaseYear}||${hashedKey}|${timeStamp}|${BROWSER_FINGERPRINT}`;
-    
-    // Encode token
-    const token = customEncode(tokenString);
-    
-    return token;
+    return customEncode(tokenString);
 }
 
 /**
- * Extract quality from stream source or URL
+ * Detect stream quality via HEAD request
  */
-function getQualityFromSource(source) {
-    if (!source) {
+async function detectStreamQuality(url, rid) {
+    try {
+        const response = await fetch(url, {
+            method: 'HEAD',
+            timeout: 5000
+        });
+        
+        const contentType = response.headers.get('content-type');
+        const contentLength = response.headers.get('content-length');
+        
+        if (contentLength && !isNaN(contentLength)) {
+            const sizeMB = parseInt(contentLength) / (1024 * 1024);
+            if (sizeMB >= 4000) return '4K';
+            if (sizeMB >= 2000) return '1440p';
+            if (sizeMB >= 1000) return '1080p';
+            if (sizeMB >= 500) return '720p';
+            if (sizeMB >= 200) return '480p';
+        }
+        
+        if (contentType && contentType.includes('application/vnd.apple.mpegurl')) return 'Adaptive';
+        
+        return 'Auto';
+    } catch (error) {
         return 'Auto';
     }
-
-    // Check label first
-    if (source.label) {
-        const label = source.label.toLowerCase();
-        if (label.includes('2160') || label.includes('4k')) return '4K';
-        if (label.includes('1440') || label.includes('2k')) return '1440p';
-        if (label.includes('1080')) return '1080p';
-        if (label.includes('720')) return '720p';
-        if (label.includes('480')) return '480p';
-        if (label.includes('360')) return '360p';
-        if (label.includes('240')) return '240p';
-        if (label.includes('auto')) return 'Auto';
-        return source.label; // Use the label as quality if it's descriptive
-    }
-
-    // Check other possible quality fields
-    if (source.quality) {
-        const quality = source.quality.toLowerCase();
-        if (quality.includes('2160') || quality.includes('4k')) return '4K';
-        if (quality.includes('1440') || quality.includes('2k')) return '1440p';
-        if (quality.includes('1080')) return '1080p';
-        if (quality.includes('720')) return '720p';
-        if (quality.includes('480')) return '480p';
-        if (quality.includes('360')) return '360p';
-        if (quality.includes('240')) return '240p';
-        return source.quality;
-    }
-
-    // Try to extract from URL
-    if (source.url) {
-        const urlMatch = source.url.match(/(\d{3,4})[pP]/);
-        if (urlMatch) {
-            const res = parseInt(urlMatch[1]);
-            if (res >= 2160) return '4K';
-            if (res >= 1440) return '1440p';
-            if (res >= 1080) return '1080p';
-            if (res >= 720) return '720p';
-            if (res >= 480) return '480p';
-            if (res >= 360) return '360p';
-            return '240p';
-        }
-    }
-
-    // Default to Auto since Cinevibe provides adaptive streaming
-    return 'Auto';
-}
-
-/**
- * Make HEAD request to detect stream quality
- */
-function detectStreamQuality(url) {
-    console.log(`[Cinevibe] Detecting quality for: ${url.substring(0, 50)}...`);
-
-    return fetch(url, {
-        method: 'HEAD',
-        headers: WORKING_HEADERS
-    }).then(function(response) {
-        // Try to extract quality from Content-Disposition header filename
-        let quality = 'Auto'; // Default fallback
-
-        const contentDisposition = response.headers.get('content-disposition');
-        if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename[^;]*=([^;]*)/i);
-            if (filenameMatch) {
-                const filename = filenameMatch[1].replace(/["']/g, '');
-                // Extract quality from filename (e.g., "Movie-720P.mp4", "Movie-1080P.mp4")
-                const qualityMatch = filename.match(/-(\d{3,4})[pP]/i);
-                if (qualityMatch) {
-                    const res = parseInt(qualityMatch[1]);
-                    if (res >= 2160) quality = '4K';
-                    else if (res >= 1440) quality = '1440p';
-                    else if (res >= 1080) quality = '1080p';
-                    else if (res >= 720) quality = '720p';
-                    else if (res >= 480) quality = '480p';
-                    else if (res >= 360) quality = '360p';
-                    else quality = '240p';
-                }
-            }
-        }
-
-        // Fallback: Check Content-Type for video format hints
-        if (quality === 'Auto') {
-            const contentType = response.headers.get('content-type');
-            if (contentType) {
-                if (contentType.includes('avc1.6400') || contentType.includes('hev1.2.4.L150') || contentType.includes('hvc1.2.4.L150')) {
-                    quality = '4K';
-                } else if (contentType.includes('avc1.6400') || contentType.includes('hev1.2.4.L120') || contentType.includes('hvc1.2.4.L120')) {
-                    quality = '1440p';
-                } else if (contentType.includes('avc1.4d00') || contentType.includes('hev1.1.6.L93') || contentType.includes('hvc1.1.6.L93')) {
-                    quality = '1080p';
-                } else if (contentType.includes('avc1.4200') || contentType.includes('hev1.1.6.L63') || contentType.includes('hvc1.1.6.L63')) {
-                    quality = '720p';
-                } else if (contentType.includes('avc1.42C0')) {
-                    quality = '480p';
-                }
-            }
-        }
-
-        // Fallback: Check for resolution in custom headers
-        if (quality === 'Auto') {
-            const resolution = response.headers.get('x-resolution') || response.headers.get('resolution');
-            if (resolution) {
-                const resMatch = resolution.match(/(\d+)x(\d+)/);
-                if (resMatch) {
-                    const height = parseInt(resMatch[2]);
-                    if (height >= 2160) quality = '4K';
-                    else if (height >= 1440) quality = '1440p';
-                    else if (height >= 1080) quality = '1080p';
-                    else if (height >= 720) quality = '720p';
-                    else if (height >= 480) quality = '480p';
-                    else if (height >= 360) quality = '360p';
-                    else quality = '240p';
-                }
-            }
-        }
-
-        // Fallback: Check Content-Length for file size estimation
-        if (quality === 'Auto') {
-            const contentLength = response.headers.get('content-length');
-            if (contentLength && !isNaN(contentLength)) {
-                const sizeGB = parseInt(contentLength) / (1024 * 1024 * 1024);
-                const sizeMB = parseInt(contentLength) / (1024 * 1024);
-                if (sizeGB >= 4) quality = '4K';
-                else if (sizeGB >= 2) quality = '1440p';
-                else if (sizeGB >= 1) quality = '1080p';
-                else if (sizeMB >= 500) quality = '720p';
-                else if (sizeMB >= 200) quality = '480p';
-            }
-        }
-
-        return quality;
-
-    }).catch(function(error) {
-        console.log(`[Cinevibe] HEAD request failed, using Auto quality: ${error.message}`);
-        return 'Auto';
-    });
-}
-
-/**
- * Fetch streaming data from Cinevibe API
- */
-function fetchStreams(tmdbId, mediaType, seasonNum, episodeNum, mediaInfo) {
-    const { title, releaseYear } = mediaInfo;
-
-    // Generate token
-    const token = generateToken(tmdbId, title, releaseYear, mediaType);
-    const timestamp = Date.now();
-
-    // Build API URL
-    const apiUrl = `${BASE_URL}/api/stream/fetch?server=cinebox-1&type=${mediaType}&mediaId=${tmdbId}&title=${encodeURIComponent(title)}&releaseYear=${releaseYear}&_token=${token}&_ts=${timestamp}`;
-
-    console.log(`[Cinevibe] Fetching streams from API...`);
-
-    return fetch(apiUrl, {
-        method: 'GET',
-        headers: WORKING_HEADERS
-    }).then(function(response) {
-        if (!response.ok) {
-            throw new Error(`Cinevibe API error: ${response.status} ${response.statusText}`);
-        }
-        return response.json();
-    }).then(function(data) {
-        console.log(`[Cinevibe] API response received`);
-
-        if (!data || !data.sources || !Array.isArray(data.sources) || data.sources.length === 0) {
-            throw new Error('No sources found in API response');
-        }
-
-        // Process sources and detect qualities
-        const qualityPromises = data.sources.map(function(source, index) {
-            if (!source || !source.url) {
-                return Promise.resolve({
-                    index: index,
-                    source: source,
-                    quality: 'Auto'
-                });
-            }
-
-            return detectStreamQuality(source.url).then(function(quality) {
-                return {
-                    index: index,
-                    source: source,
-                    quality: quality
-                };
-            }).catch(function() {
-                return {
-                    index: index,
-                    source: source,
-                    quality: 'Auto'
-                };
-            });
-        });
-
-        return Promise.allSettled(qualityPromises).then(function(results) {
-            const streams = [];
-
-            results.forEach(function(result) {
-                if (result.status === 'fulfilled') {
-                    const { index, source, quality } = result.value;
-
-                    // Build media title
-                    let mediaTitle = title;
-                    if (mediaType === 'tv' && seasonNum && episodeNum) {
-                        mediaTitle = `${title} S${String(seasonNum).padStart(2, '0')}E${String(episodeNum).padStart(2, '0')}`;
-                    } else if (releaseYear) {
-                        mediaTitle = `${title} (${releaseYear})`;
-                    }
-
-                    streams.push({
-                        name: `Cinevibe - ${quality}`,
-                        title: mediaTitle,
-                        url: source.url,
-                        quality: quality,
-                        size: 'Unknown',
-                        headers: WORKING_HEADERS,
-                        provider: 'cinevibe'
-                    });
-                }
-            });
-
-            console.log(`[Cinevibe] Found ${streams.length} streams with detected qualities`);
-
-            return streams;
-        });
-    }).catch(function(error) {
-        console.error(`[Cinevibe] Stream fetch error: ${error.message}`);
-        throw error;
-    });
 }
 
 /**
  * Main scraping function
- * @param {string} tmdbId - TMDB ID
- * @param {string} mediaType - "movie" or "tv"
- * @param {number} seasonNum - Season number (TV only)
- * @param {number} episodeNum - Episode number (TV only)
  */
-function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-    console.log(`[Cinevibe] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}${mediaType === 'tv' ? `, S:${seasonNum}E:${episodeNum}` : ''}`);
+async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+    const rid = Math.random().toString(36).slice(2, 8);
+    log(`Starting getStreams for TMDB:${tmdbId} Type:${mediaType}`, rid);
     
-    // Check if TV series is supported (Python code shows it's not supported yet)
+    // Only movies supported by current Cinevibe API structure
     if (mediaType === 'tv') {
-        console.log('[Cinevibe] TV Series currently not supported');
-        return Promise.resolve([]);
+        log('TV Series currently not supported', rid);
+        return [];
     }
     
-    // Get TMDB details first
-    return getTMDBDetails(tmdbId, mediaType).then(function(mediaInfo) {
-        if (!mediaInfo.title || !mediaInfo.releaseYear) {
-            throw new Error('Could not extract title and release year from TMDB response');
+    try {
+        // Step 1: TMDB Details
+        const mediaInfo = await getTMDBDetails(tmdbId, mediaType, rid);
+        if (!mediaInfo || !mediaInfo.title) {
+            throw new Error('Could not extract title from TMDB');
         }
+        log(`Step 1: Found title "${mediaInfo.title}" (${mediaInfo.releaseYear})`, rid);
         
-        // Fetch streams from Cinevibe API
-        return fetchStreams(tmdbId, mediaType, seasonNum, episodeNum, mediaInfo);
-    }).catch(function(error) {
-        console.error(`[Cinevibe] Scraping error: ${error.message}`);
+        // Step 2: Token Generation
+        const token = generateToken(tmdbId, mediaInfo.title, mediaInfo.releaseYear);
+        const timestamp = Date.now();
+        
+        // Step 3: Fetch Streams via Stealth
+        const apiUrl = `${BASE_URL}/api/stream/fetch?server=cinebox-1&type=${mediaType}&mediaId=${tmdbId}&title=${encodeURIComponent(mediaInfo.title)}&releaseYear=${mediaInfo.releaseYear}&_token=${token}&_ts=${timestamp}`;
+        
+        log(`Step 3: Fetching streams from API via stealth`, rid);
+        
+        const { gotScraping } = await import('got-scraping');
+        const response = await gotScraping({
+            url: apiUrl,
+            headers: {
+                'Referer': BASE_URL + '/',
+                'X-CV-Fingerprint': BROWSER_FINGERPRINT,
+                'X-CV-Session': SESSION_ENTROPY,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            headerGeneratorOptions: {
+                browsers: [{ name: 'chrome', minVersion: 120 }],
+                devices: ['desktop']
+            },
+            timeout: { request: 15000 }
+        });
+
+        if (response.statusCode !== 200) {
+            throw new Error(`Cinevibe API error: ${response.statusCode}`);
+        }
+
+        const data = JSON.parse(response.body);
+        if (!data || !data.sources || !Array.isArray(data.sources)) {
+            throw new Error('No sources found in API response');
+        }
+
+        // Step 4: Stream Resolution
+        const streamPromises = data.sources.map(async (source) => {
+            if (!source || !source.url) return null;
+            
+            const quality = await detectStreamQuality(source.url, rid);
+            
+            return {
+                name: `Cinevibe - ${quality}`,
+                title: `${mediaInfo.title} (${mediaInfo.releaseYear})`,
+                url: source.url,
+                quality: quality,
+                behaviorHints: {
+                    bingeGroup: `cinevibe-cinebox`
+                },
+                provider: 'cinevibe'
+            };
+        });
+
+        const streams = (await Promise.all(streamPromises)).filter(Boolean);
+        
+        // Sort by quality
+        const order = { '4K': 7, '2160p': 7, '1440p': 6, '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, 'Auto': 0, 'Unknown': 0 };
+        streams.sort((a, b) => (order[b.quality] || 0) - (order[a.quality] || 0));
+
+        log(`🎉 COMPLETE: Returning ${streams.length} stream(s)`, rid);
+        return streams;
+
+    } catch (error) {
+        log(`❌ Scraping error: ${error.message}`, rid);
         return [];
-    });
+    }
 }
 
-// Export the main function
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getStreams };
-} else {
-    // For React Native environment
-    global.CinevibeScraperModule = { getStreams };
-}
-
+module.exports = { getStreams };
