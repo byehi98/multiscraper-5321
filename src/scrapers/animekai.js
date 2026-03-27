@@ -1,5 +1,5 @@
 // AnimeKai Scraper for MultiScraper
-// Refactored to use async/await and robust error handling similar to 4khdhub.js
+// Refactored to use async/await and got-scraping for stealth metadata retrieval
 
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
@@ -80,45 +80,31 @@ async function decryptMegaMedia(embedUrl, rid) {
         log(`Fetching media metadata via stealth: ${mediaUrl}`, rid);
         
         // Use got-scraping for stealth requests to bypass 403 Forbidden
-        let body;
-        try {
-            const { gotScraping } = await import('got-scraping');
-            const response = await gotScraping({
-                url: mediaUrl,
-                headers: {
-                    'Referer': embedUrl,
-                    'Origin': origin,
-                    'Accept': 'application/json, text/plain, */*',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                headerGeneratorOptions: {
-                    browsers: [{ name: 'chrome', minVersion: 120 }],
-                    devices: ['desktop'],
-                    locales: ['en-US']
-                },
-                timeout: { request: 15000 },
-                retry: { limit: 2 }
-            });
-            
-            if (response.statusCode !== 200) {
-                throw new Error(`Stealth fetch failed with status ${response.statusCode}`);
-            }
-            body = response.body;
-        } catch (gotErr) {
-            log(`Stealth fetch error: ${gotErr.message}. Falling back to regular request.`, rid);
-            // Fallback to regular request just in case
-            const res = await request(mediaUrl, { 
-                headers: { 
-                    'Referer': embedUrl,
-                    'Origin': origin,
-                    'Accept': 'application/json, text/plain, */*',
-                    'X-Requested-With': 'XMLHttpRequest'
-                } 
-            });
-            body = await res.text();
+        const { gotScraping } = await import('got-scraping');
+        const response = await gotScraping({
+            url: mediaUrl,
+            headers: {
+                'Referer': embedUrl,
+                'Origin': origin,
+                'Accept': 'application/json, text/plain, */*',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            headerGeneratorOptions: {
+                browsers: [{ name: 'chrome', minVersion: 120 }],
+                devices: ['desktop'],
+                locales: ['en-US']
+            },
+            timeout: { request: 15000 },
+            retry: { limit: 2 }
+        });
+        
+        if (response.statusCode !== 200) {
+            throw new Error(`Stealth fetch failed with status ${response.statusCode}`);
         }
 
-        const mediaResp = JSON.parse(body);
+        // CRITICAL: The agent passed to dec-mega MUST match the one used to fetch the metadata
+        const userAgent = response.request.options.headers['user-agent'];
+        const mediaResp = JSON.parse(response.body);
         
         if (!mediaResp || !mediaResp.result) {
             log(`No result from media metadata: ${mediaUrl}`, rid, mediaResp);
@@ -126,12 +112,15 @@ async function decryptMegaMedia(embedUrl, rid) {
         }
 
         const encrypted = mediaResp.result;
-        log(`Decrypting media sources via API`, rid);
+        log(`Decrypting media sources via API using agent: ${userAgent.slice(0, 30)}...`, rid);
         
+        // Small delay to avoid 500 Internal Server Error from API if triggered by rapid calls
+        await new Promise(r => setTimeout(r, 200));
+
         const decRes = await request(`${API}/dec-mega`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: encrypted, agent: HEADERS['User-Agent'] })
+            body: JSON.stringify({ text: encrypted, agent: userAgent })
         });
         const decJson = await decRes.json();
         
@@ -316,7 +305,6 @@ async function getStreams(tmdbId, type, season, episode) {
         const serversRes = await request(`${KAI_AJAX}/links/list?token=${token}&_=${encToken}`);
         const serversJson = await serversRes.json();
         
-        // Parse servers HTML locally using cheerio
         const $ = cheerio.load(serversJson.result);
         const lidPromises = [];
 
