@@ -54,8 +54,8 @@ function calculateSimilarity(str1, str2) {
     var matrix = Array(len1 + 1).fill(null).map(function () { return Array(len2 + 1).fill(0); });
     for (var i = 0; i <= len1; i++) matrix[i][0] = i;
     for (var j = 0; j <= len2; j++) matrix[0][j] = j;
-    for (i = 1; i <= len1; i++) {
-        for (j = 1; j <= len2; j++) {
+    for (var i = 1; i <= len1; i++) {
+        for (var j = 1; j <= len2; j++) {
             var cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
             matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
         }
@@ -137,6 +137,7 @@ function cleanTitle(title) {
 }
 
 async function getFilenameFromUrl(gotScraping, url) {
+    if (!url || url.includes('googleusercontent.com')) return null;
     try {
         const response = await gotScraping({
             url: url,
@@ -178,7 +179,11 @@ async function extractHubCloudLinks(gotScraping, url) {
         const response = await makeRequest(gotScraping, url, { parseHTML: true });
         const $ = response.$;
         var href;
-        if (url.indexOf('hubcloud.php') !== -1) {
+        
+        const hubCloudPhpLink = $('a[href*="hubcloud.php"]').attr('href');
+        if (hubCloudPhpLink) {
+            href = toAbsolute(hubCloudPhpLink, origin);
+        } else if (url.indexOf('hubcloud.php') !== -1) {
             href = url;
         } else {
             var tokenMatch = url.match(/\/video\/([^\/\?]+)(\?token=([^&\s]+))?/);
@@ -191,7 +196,7 @@ async function extractHubCloudLinks(gotScraping, url) {
                 }
                 href = token ? `${origin}/video/${videoId}?token=${token}` : url;
             } else {
-                var rawHref = $('#download').attr('href') || $('a[href*="hubcloud.php"]').attr('href') || $('.download-btn').attr('href') || $('a[href*="download"]').attr('href');
+                var rawHref = $('#download').attr('href') || $('.download-btn').attr('href') || $('a[href*="download"]').attr('href');
                 if (!rawHref) throw new Error('Download element not found');
                 href = toAbsolute(rawHref, origin);
             }
@@ -201,30 +206,64 @@ async function extractHubCloudLinks(gotScraping, url) {
         const $$ = secondResponse.$;
 
         async function resolveHubCloudUrl(url) {
+            if (!url) return null;
             if (url.includes('r2.cloudflarestorage.com')) return url;
-            if (url.includes('360news4u.net/dl.php?link=')) {
-                const linkMatch = url.match(/360news4u\.net\/dl\.php\?link=([^&\s]+)/);
-                if (linkMatch && linkMatch[1]) return decodeURIComponent(linkMatch[1]);
+            
+            const redirectors = [
+                '360news4u.net/dl.php?link=',
+                'cryptoinsights.site/dl.php?link=',
+                'gamerxyt.com/dl.php?link=',
+                '360news4u.com/dl.php?link=',
+                '360news.world/dl.php?link=',
+                '360news.xyz/dl.php?link=',
+                'gamerxyt.com/hubcloud.php?link='
+            ];
+            
+            for (const red of redirectors) {
+                if (url.includes(red)) {
+                    const parts = url.split(red);
+                    if (parts.length > 1) {
+                        const directUrl = decodeURIComponent(parts[1]);
+                        if (directUrl.includes('googleusercontent.com') || directUrl.includes('r2.cloudflarestorage.com')) return directUrl;
+                        return await resolveHubCloudUrl(directUrl);
+                    }
+                }
             }
+            
             if (url.includes('video-downloads.googleusercontent.com')) return url;
 
             try {
+                await new Promise(resolve => setTimeout(resolve, 200));
+
                 const res = await gotScraping({
                     url: url,
                     method: 'GET',
                     followRedirect: false,
-                    throwHttpErrors: false
+                    throwHttpErrors: false,
+                    headers: {
+                        'Referer': origin
+                    }
                 });
 
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    return await resolveHubCloudUrl(res.headers.location);
+                    return await resolveHubCloudUrl(toAbsolute(res.headers.location, url));
                 }
+                
                 if (res.statusCode === 200) {
                     if (res.headers['content-type']?.includes('video/')) return url;
-                    const directUrlMatch = res.body.match(/(https?:\/\/[^"'\s]+\.r2\.cloudflarestorage\.com[^"'\s]*)/);
+                    
+                    const body = res.body;
+                    const directUrlMatch = body.match(/(https?:\/\/[^"'\s]+\.r2\.cloudflarestorage\.com[^"'\s]*)/);
                     if (directUrlMatch) return directUrlMatch[1];
-                    const otherDirectMatch = res.body.match(/(https?:\/\/[^"'\s]+\/[^"'\s]*\.(mkv|mp4|avi|m4v)[^"'\s]*)/i);
+                    
+                    const otherDirectMatch = body.match(/(https?:\/\/[^"'\s]+\/[^"'\s]*\.(mkv|mp4|avi|m4v)[^"'\s]*)/i);
                     if (otherDirectMatch) return otherDirectMatch[1];
+                    
+                    const nextDoc = cheerio.load(body);
+                    const nextLink = nextDoc('a.btn-success, a.btn-primary, a#download, a.download-btn, a.btn').attr('href');
+                    if (nextLink && nextLink !== url && !nextLink.startsWith('#')) {
+                        return await resolveHubCloudUrl(toAbsolute(nextLink, url));
+                    }
                 }
                 return url;
             } catch (e) {
@@ -234,15 +273,16 @@ async function extractHubCloudLinks(gotScraping, url) {
 
         async function buildTask(buttonText, buttonLink, headerDetails, size, quality) {
             const qualityLabel = quality ? (' - ' + quality + 'p') : ' - Unknown';
-            const pd = buttonLink.match(/pixeldrain\.(?:net|dev)\/u\/([a-zA-Z0-9]+)/);
+            const pd = buttonLink.match(/pixeldrain\.(?:net|dev|dev)\/u\/([a-zA-Z0-9]+)/);
             if (pd && pd[1]) buttonLink = 'https://pixeldrain.net/api/file/' + pd[1];
 
             let resolvedUrl = buttonLink;
-            if (buttonLink.includes('.fans/?id=') || buttonLink.includes('.workers.dev/?id=') || buttonLink.includes('360news4u.net/dl.php')) {
+            if (buttonLink.includes('?') || buttonLink.includes('dl.php') || buttonLink.includes('.dev') || buttonLink.includes('.fans') || buttonLink.includes('.foo') || buttonLink.includes('.one') || buttonLink.includes('.skin')) {
                 resolvedUrl = await resolveHubCloudUrl(buttonLink);
             }
 
-            const actualFilename = await getFilenameFromUrl(gotScraping, resolvedUrl);
+            // Skip HEAD request for googleusercontent to avoid timeouts
+            const actualFilename = resolvedUrl.includes('googleusercontent.com') ? null : await getFilenameFromUrl(gotScraping, resolvedUrl);
             const displayFilename = actualFilename || headerDetails || 'Unknown';
             const finalTitle = [displayFilename, size].filter(Boolean).join('\n');
 
@@ -280,18 +320,17 @@ async function extractHubCloudLinks(gotScraping, url) {
                     const $btn = $$(localBtns[j]);
                     const text = ($btn.text() || '').trim();
                     let link = $btn.attr('href');
-                    if (!link) continue;
+                    if (!link || link.startsWith('#')) continue;
                     link = toAbsolute(link, href);
-                    if (/(hubcloud|hubdrive|pixeldrain|buzz|10gbps|workers\.dev|r2\.dev|download|api\/file)/i.test(link) || text.toLowerCase().includes('download')) {
+                    if (/(hubcloud|hubdrive|pixeldrain|buzz|10gbps|workers\.dev|r2\.dev|download|api\/file|fans|foo|one|skin)/i.test(link) || text.toLowerCase().includes('download')) {
                         tasks.push(buildTask(text, link, headerDetails, size, quality));
                     }
                 }
             }
         }
 
-        if (tasks.length === 0) {
-            let buttons = $$.root().find('div.card-body h2 a.btn');
-            if (buttons.length === 0) buttons = $$.root().find('a.btn, .btn, a[href]');
+        if (tasks.length === 0 || tasks.length < 2) {
+            let buttons = $$.root().find('a.btn, .btn, a[href]');
             const size = $$('i#size').first().text() || '';
             const header = $$('div.card-header').first().text() || '';
             const quality = getIndexQuality(header);
@@ -301,9 +340,11 @@ async function extractHubCloudLinks(gotScraping, url) {
                 const $btn = $$(buttons[i]);
                 const text = ($btn.text() || '').trim();
                 let link = $btn.attr('href');
-                if (!link) continue;
+                if (!link || link.startsWith('#')) continue;
                 link = toAbsolute(link, href);
-                tasks.push(buildTask(text, link, headerDetails, size, quality));
+                if (/(hubcloud|hubdrive|pixeldrain|buzz|10gbps|workers\.dev|r2\.dev|download|api\/file|fans|foo|one|skin)/i.test(link) || text.toLowerCase().includes('download')) {
+                    tasks.push(buildTask(text, link, headerDetails, size, quality));
+                }
             }
         }
 
@@ -400,11 +441,10 @@ function findBestMatch(results, query) {
     if (!results || results.length === 0) return null;
     var scored = results.map(r => ({
         item: r,
-        score: (normalizeTitle(r.title) === normalizeTitle(query) ? 100 : 0) + calculateSimilarity(r.title, query) * 50
+        score: (normalizeTitle(r.title).includes(normalizeTitle(query)) ? 100 : 0) + calculateSimilarity(r.title, query) * 50
     }));
     return scored.sort((a, b) => b.score - a.score)[0].item;
 }
-
 async function getTMDBDetails(gotScraping, tmdbId, mediaType) {
     const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`;
     try {
@@ -418,12 +458,16 @@ async function getTMDBDetails(gotScraping, tmdbId, mediaType) {
     }
 }
 
+
 async function validateVideoUrl(gotScraping, url) {
     try {
         const response = await gotScraping({
             url: url,
             method: 'HEAD',
-            headers: { 'Range': 'bytes=0-1' },
+            headers: { 
+                'Range': 'bytes=0-1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
             timeout: { request: 8000 },
             followRedirect: true
         });
@@ -454,19 +498,40 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
     
     let allStreams = nestedStreams.flat().filter(s => {
         const u = s.url.toLowerCase();
-        return !u.includes('cdn.ampproject.org') && !u.includes('bloggingvector.shop') && !u.includes('winexch.com');
+        // Filter out dummy/admin/telegram links
+        return !u.includes('cdn.ampproject.org') && 
+               !u.includes('bloggingvector.shop') && 
+               !u.includes('winexch.com') &&
+               !u.includes('/admin') &&
+               !u.includes('t.me/') &&
+               !u.includes('1.1.1.1') &&
+               !u.includes('tinyurl.com') &&
+               !u.includes('one.one.one.one') &&
+               !u.includes('push-me-once.com');
     });
 
     const uniqueStreams = Array.from(new Map(allStreams.map(s => [s.url, s])).values());
     
     if (global.URL_VALIDATION_ENABLED) {
-        const validated = await Promise.all(uniqueStreams.map(async s => (await validateVideoUrl(gotScraping, s.url)) ? s : null));
+        const validated = await Promise.all(uniqueStreams.map(async s => {
+            // Skip validation for HubCloud direct links as they are often picky with HEAD requests/Range
+            // and we know they were just generated by our resolution logic.
+            if (s.url.includes('googleusercontent.com') || s.url.includes('hubcdn.fans') || s.url.includes('.workers.dev') || s.url.includes('.r2.cloudflarestorage.com')) {
+                return s;
+            }
+            const isValid = await validateVideoUrl(gotScraping, s.url);
+            return isValid ? s : null;
+        }));
         allStreams = validated.filter(Boolean);
     } else {
         allStreams = uniqueStreams;
     }
 
-    return allStreams.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
+    return allStreams.sort((a, b) => {
+        const qA = parseInt(a.quality) || 0;
+        const qB = parseInt(b.quality) || 0;
+        return qB - qA;
+    });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
