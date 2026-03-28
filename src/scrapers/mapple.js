@@ -66,14 +66,14 @@ function parseM3U8(content) {
     return streams;
 }
 
-// Transform direct heistotron URL to a mapple proxy URL if needed
+// Transform direct heistotron URL to have an extension if missing
 function transformUrl(url) {
-    if (url.includes('heistotron.uk')) {
-        // Many sources proxy through mapple.uk/api/proxy or similar
-        // For heistotron, the most reliable way is often to use the direct link with proper headers
-        // But if Stremio isn't sending them, we might need a workaround.
-        // Let's keep it direct but ensure headers are robust.
-        return url;
+    if (url.includes('heistotron.uk') && !url.includes('.m3u8')) {
+        if (url.includes('?')) {
+            const [base, query] = url.split('?');
+            return `${base}.m3u8?${query}`;
+        }
+        return url + '.m3u8';
     }
     return url;
 }
