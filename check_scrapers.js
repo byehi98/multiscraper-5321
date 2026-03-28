@@ -9,7 +9,7 @@ const files = [
   // "./src/scrapers/hdrezka",
   // "./src/scrapers/mallumv",
   // "./src/scrapers/mapple",
-  "./src/scrapers/moviebox",
+  // "./src/scrapers/moviebox",
   "./src/scrapers/moviesmod",
   "./src/scrapers/myflixer-extractor",
   "./src/scrapers/netmirror",
