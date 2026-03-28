@@ -13,7 +13,7 @@ const files = [
   // "./src/scrapers/moviesmod",
   // "./src/scrapers/myflixer-extractor",
   // "./src/scrapers/netmirror",
-  "./src/scrapers/showbox",
+  // "./src/scrapers/showbox",
   "./src/scrapers/streamflix",
   "./src/scrapers/uhdmovies",
   "./src/scrapers/videasy",
