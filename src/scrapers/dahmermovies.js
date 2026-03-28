@@ -1,5 +1,5 @@
 // Dahmer Movies Scraper for MultiScraper
-// Optimized to bypass Cloudflare and handle large directory listings efficiently
+// Optimized for stealth and efficiency using modern got-scraping patterns
 
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
@@ -8,17 +8,16 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const DAHMER_MOVIES_API = 'https://a.111477.xyz';
 const TIMEOUT = 20000; // 20 seconds
-
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 // Global to track request time for throttling
 let lastDahmerRequestTime = 0;
 
-// Helper function to make HTTP requests using got-scraping with node-fetch fallback
+// Helper function to make HTTP requests using got-scraping with advanced stealth
 async function makeRequest(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
-    // Throttling: Implement a delay between rapid consecutive calls (GEMINI.md mandate)
+    // Throttling: 1000ms delay between calls (GEMINI.md mandate)
     const now = Date.now();
     const diff = now - lastDahmerRequestTime;
     if (diff < 1000) {
@@ -35,16 +34,23 @@ async function makeRequest(url, options = {}) {
             const response = await gotScraping({
                 url: url,
                 method: options.method || 'GET',
+                http2: true, // Force HTTP/2 for better stealth
                 headers: {
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Referer': `${DAHMER_MOVIES_API}/`,
+                    'Cache-Control': 'max-age=0',
+                    'Sec-Ch-Ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"Windows"',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1',
                     ...options.headers
                 },
                 headerGeneratorOptions: {
-                    browsers: [{ name: 'chrome', minVersion: 110 }],
+                    browsers: [{ name: 'chrome', minVersion: 124 }],
                     devices: ['desktop'],
                     locales: ['en-US']
                 },
@@ -57,73 +63,74 @@ async function makeRequest(url, options = {}) {
             const body = response.body;
             const pageTitle = body.match(/<title>(.*?)<\/title>/i)?.[1]?.toLowerCase() || "";
             
-            if (body.includes('cf-challenge') || body.includes('Just a moment') || pageTitle.includes('just a moment') || body.length < 5000) {
-                if (body.length < 5000 && !body.includes('</html>')) {
-                     throw new Error('Truncated response');
-                }
-                if (body.includes('cf-challenge') || pageTitle.includes('just a moment')) {
-                     throw new Error('Cloudflare challenge detected');
-                }
+            // Validation: Check for challenge pages or truncated responses
+            if (body.includes('cf-challenge') || body.includes('challenge-platform') || 
+                body.includes('Just a moment') || pageTitle.includes('just a moment') || 
+                pageTitle.includes('cloudflare')) {
+                throw new Error('Cloudflare challenge detected');
+            }
+            
+            if (body.length < 5000 || !body.toLowerCase().includes('</html>')) {
+                throw new Error(`Response incomplete (length: ${body.length})`);
             }
 
-            return { body, status: response.statusCode };
+            return { body, status: response.statusCode, headers: response.headers };
         } catch (error) {
             lastError = error;
-            console.log(`[DahmerMovies] attempt failed: ${error.message}`);
-            if (i < maxRetries - 1) await new Promise(r => setTimeout(r, 2000));
+            console.log(`[DahmerMovies] Request attempt failed: ${error.message}`);
+            if (i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
         }
     }
-
-    // Last resort: simple node-fetch
-    console.log(`[DahmerMovies] node-fetch fallback: ${url}`);
+    
+    // Last resort fallback: node-fetch (HTTP/1.1)
+    console.log(`[DahmerMovies] Final fallback (node-fetch): ${url}`);
     try {
         const response = await fetch(url, {
             headers: {
-                'User-Agent': USER_AGENT,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': `${DAHMER_MOVIES_API}/`
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
             },
             timeout: 15000
         });
         const body = await response.text();
-        if (response.ok && body.length > 5000) {
+        const pageTitle = body.match(/<title>(.*?)<\/title>/i)?.[1]?.toLowerCase() || "";
+        
+        if (response.ok && body.length > 6000 && body.toLowerCase().includes('</html>') && !pageTitle.includes('just a moment')) {
+            console.log(`[DahmerMovies] Fallback success (length: ${body.length})`);
             return { body, status: response.status };
         }
-        throw new Error(`node-fetch failed with status ${response.status} or small body (${body.length})`);
+        throw new Error(`Fallback also failed or returned challenge (status: ${response.status}, length: ${body.length})`);
     } catch (error) {
-        console.log(`[DahmerMovies] fallback failed: ${error.message}`);
-        throw lastError;
+        console.log(`[DahmerMovies] Fallback failed: ${error.message}`);
+        throw lastError; // Throw the original got-scraping error
     }
 }
 
 // Utility functions
 function getEpisodeSlug(season = null, episode = null) {
-    if (season === null && episode === null) return ['', ''];
+    if (season === null || episode === null) return ['', ''];
     const s = season < 10 ? `0${season}` : `${season}`;
     const e = episode < 10 ? `0${episode}` : `${episode}`;
     return [s, e];
 }
 
-function getIndexQuality(str) {
-    if (!str) return 0;
-    const match = str.match(/(\d{3,4})[pP]/);
-    return match ? parseInt(match[1]) : 0;
-}
-
 function getQualityWithCodecs(str) {
     if (!str) return 'Unknown';
-    const qualityMatch = str.match(/(\d{3,4})[pP]/);
-    const baseQuality = qualityMatch ? `${qualityMatch[1]}p` : 'Unknown';
+    const resMatch = str.match(/(\d{3,4})[pP]/);
+    const base = resMatch ? `${resMatch[1]}p` : 'Unknown';
     const codecs = [];
-    const lowerStr = str.toLowerCase();
-    if (lowerStr.includes('dv') || lowerStr.includes('dolby vision')) codecs.push('DV');
-    if (lowerStr.includes('hdr10+')) codecs.push('HDR10+');
-    else if (lowerStr.includes('hdr10') || lowerStr.includes('hdr')) codecs.push('HDR');
-    if (lowerStr.includes('remux')) codecs.push('REMUX');
-    if (lowerStr.includes('imax')) codecs.push('IMAX');
-    return codecs.length > 0 ? `${baseQuality} | ${codecs.join(' | ')}` : baseQuality;
+    const lower = str.toLowerCase();
+    if (lower.includes('dv') || lower.includes('dolby vision')) codecs.push('DV');
+    if (lower.includes('hdr10+')) codecs.push('HDR10+');
+    else if (lower.includes('hdr10') || lower.includes('hdr')) codecs.push('HDR');
+    if (lower.includes('remux')) codecs.push('REMUX');
+    if (lower.includes('imax')) codecs.push('IMAX');
+    return codecs.length > 0 ? `${base} | ${codecs.join(' | ')}` : base;
 }
 
 function formatFileSize(sizeInput) {
@@ -175,12 +182,11 @@ async function findFolderFuzzy(baseUrl, targetName) {
         const cleanTarget = targetName.toLowerCase().replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
         
         let bestMatch = null;
-        let minDistance = 10;
+        let minDistance = 15;
 
         for (const folder of folders) {
             const folderName = folder.text.replace(/\/$/, '').toLowerCase();
             const cleanFolder = folderName.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
-            
             if (cleanFolder === cleanTarget) return folder;
             
             const distance = levenshteinDistance(cleanFolder, cleanTarget);
@@ -199,7 +205,7 @@ async function findFolderFuzzy(baseUrl, targetName) {
 async function invokeDahmerMovies(title, year, season = null, episode = null) {
     console.log(`Step 2: Database/Provider Lookup`);
     
-    // Pattern 1: Direct URL
+    // Strategy: Try direct URL first, then fuzzy match directory
     let folderUrl;
     if (season === null) {
         folderUrl = `${DAHMER_MOVIES_API}/movies/${encodeURIComponent(title)}%20%28${year}%29/`;
@@ -212,12 +218,12 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
         const response = await makeRequest(folderUrl);
         html = response.body;
     } catch (e) {
-        console.log(`[DahmerMovies] Direct URL failed, trying fuzzy matching...`);
+        console.log(`[DahmerMovies] Direct URL hit failed, trying fuzzy directory match...`);
         const searchBase = season === null ? `${DAHMER_MOVIES_API}/movies/` : `${DAHMER_MOVIES_API}/tvs/`;
         const folder = await findFolderFuzzy(searchBase, title + (season === null ? ` (${year})` : ''));
         if (!folder) return [];
         
-        console.log(`[DahmerMovies] Fuzzy match found: ${folder.text}`);
+        console.log(`[DahmerMovies] Best match: "${folder.text}"`);
         const tvBaseUrl = folder.href.startsWith('http') ? folder.href : `${DAHMER_MOVIES_API}${folder.href}`;
         folderUrl = season === null ? tvBaseUrl : `${tvBaseUrl.endsWith('/') ? tvBaseUrl : tvBaseUrl + '/'}Season ${season}/`;
         
@@ -237,8 +243,8 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
     if (filteredPaths.length === 0) return [];
 
     console.log(`Step 3: Stream Resolution`);
-    const results = filteredPaths.map(path => {
-        let url = path.href.startsWith('http') ? path.href : (path.href.startsWith('/') ? `${DAHMER_MOVIES_API}${path.href}` : `${folderUrl.endsWith('/') ? folderUrl : folderUrl + '/'}${path.href}`);
+    return filteredPaths.map(path => {
+        const url = path.href.startsWith('http') ? path.href : (path.href.startsWith('/') ? `${DAHMER_MOVIES_API}${path.href}` : `${folderUrl.endsWith('/') ? folderUrl : folderUrl + '/'}${path.href}`);
         return {
             name: "DahmerMovies",
             title: `DahmerMovies ${path.text}`,
@@ -249,9 +255,11 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
             provider: "dahmermovies",
             behaviorHints: { bingeGroup: `DahmerMovies-${path.text.includes('2160p') ? '4K' : 'HD'}` }
         };
+    }).sort((a, b) => {
+        const qA = parseInt(a.quality) || 0;
+        const qB = parseInt(b.quality) || 0;
+        return qB - qA;
     });
-
-    return results.sort((a, b) => getIndexQuality(b.title) - getIndexQuality(a.title));
 }
 
 async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
@@ -266,7 +274,7 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
         console.log(`[DahmerMovies] TMDB: "${title}" (${year})`);
         return await invokeDahmerMovies(title, year ? parseInt(year) : null, seasonNum, episodeNum);
     } catch (e) {
-        console.error(`[DahmerMovies] Error in getStreams: ${e.message}`);
+        console.error(`[DahmerMovies] Error: ${e.message}`);
         return [];
     }
 }
