@@ -67,8 +67,12 @@ async function makeRequest(url, options = {}) {
                 const isHtml = trimmedBody.startsWith('<');
                 if (isHtml) {
                     const hasClosingTag = trimmedBody.toLowerCase().endsWith('</html>');
-                    if (!hasClosingTag) {
-                        throw new Error(`Response truncated (length: ${body.length})`);
+                    // Directory listings with actual files should be reasonably large.
+                    // Empty or error listings on this server are often around 5-6KB.
+                    const isTooSmall = body.length < 8000; 
+                    
+                    if (!hasClosingTag || isTooSmall) {
+                        throw new Error(`Response truncated or suspiciously small (length: ${body.length}, hasClosingTag: ${hasClosingTag})`);
                     }
                 }
             }
@@ -236,9 +240,14 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
         
         console.log(`[DahmerMovies] Response length: ${html.length}`);
         
-        // Double check for truncation in case makeRequest didn't catch it
-        if (typeof html === 'string' && html.trim().startsWith('<') && !html.trim().toLowerCase().endsWith('</html>')) {
-            throw new Error(`Response body is incomplete/truncated (length: ${html.length})`);
+        // Double check for truncation/suspiciously small body in case makeRequest didn't catch it
+        const trimmedHtml = typeof html === 'string' ? html.trim() : '';
+        const isHtml = trimmedHtml.startsWith('<');
+        if (isHtml) {
+            const hasClosingTag = trimmedHtml.toLowerCase().endsWith('</html>');
+            if (!hasClosingTag || html.length < 8000) {
+                throw new Error(`Response body is incomplete/suspiciously small (length: ${html.length}, hasClosingTag: ${hasClosingTag})`);
+            }
         }
         
         // Parse HTML to extract links
