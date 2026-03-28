@@ -11,6 +11,13 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 // Available sources
 const SOURCES = ["mapple", "sakura", "alfa", "oak", "wiggles"];
 
+// Standard playback headers required by the video host
+const PLAYBACK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Origin": "https://mapple.uk",
+    "Referer": "https://mapple.uk/"
+};
+
 // Utility functions
 function getQualityFromStream(stream) {
     if (stream.resolution) {
@@ -61,19 +68,21 @@ function parseM3U8(content) {
 
 // Core functions
 async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
+    const headers = { ...PLAYBACK_HEADERS, 'Referer': referer, 'Cookie': cookies };
+    
     if (sourceName === 'sakura') {
         return [{
             name: `Mapple Sakura - Auto`,
             url: url,
             quality: 'Auto',
             size: "Unknown",
-            headers: { 'Referer': referer, 'Cookie': cookies },
+            headers: headers,
             provider: "mapple"
         }];
     }
 
     try {
-        const response = await gotScraping(url, { headers: { 'Referer': referer, 'Cookie': cookies } });
+        const response = await gotScraping(url, { headers: headers });
         const content = response.body;
 
         if (content.includes('#EXT-X-STREAM-INF:')) {
@@ -83,7 +92,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
                 url: stream.url,
                 quality: getQualityFromStream(stream),
                 size: "Unknown",
-                headers: { 'Referer': referer, 'Cookie': cookies },
+                headers: headers,
                 provider: "mapple"
             }));
         }
@@ -93,7 +102,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             url: url,
             quality: 'Unknown',
             size: "Unknown",
-            headers: { 'Referer': referer, 'Cookie': cookies },
+            headers: headers,
             provider: "mapple"
         }];
     } catch (error) {
@@ -102,7 +111,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             url: url,
             quality: 'Unknown',
             size: "Unknown",
-            headers: { 'Referer': referer, 'Cookie': cookies },
+            headers: headers,
             provider: "mapple"
         }];
     }
@@ -115,6 +124,7 @@ async function fetchStreamsForSource(gotScraping, tmdbId, mediaType, seasonNum, 
             url: `${MAPLE_BASE}/api/encrypt`,
             method: 'POST',
             headers: {
+                ...PLAYBACK_HEADERS,
                 'Content-Type': 'application/json',
                 'Referer': referer,
                 'Cookie': cookies
@@ -139,6 +149,7 @@ async function fetchStreamsForSource(gotScraping, tmdbId, mediaType, seasonNum, 
         const streamRes = await gotScraping({
             url: fullEncryptedUrl,
             headers: {
+                ...PLAYBACK_HEADERS,
                 'Referer': referer,
                 'Cookie': cookies
             }
@@ -186,7 +197,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         ? `${MAPLE_BASE}/watch/tv/${tmdbId}/${seasonNum}-${episodeNum}`
         : `${MAPLE_BASE}/watch/movie/${tmdbId}`;
     
-    const initialRes = await gotScraping(watchUrl);
+    const initialRes = await gotScraping(watchUrl, { headers: PLAYBACK_HEADERS });
     const cookies = initialRes.headers['set-cookie']?.join('; ') || '';
     
     console.log(`Step 3: Database/Provider Lookup [Mapple]`);
