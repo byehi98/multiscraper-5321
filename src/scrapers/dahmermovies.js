@@ -25,32 +25,44 @@ const Qualities = {
 async function makeRequest(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
-    try {
-        const response = await gotScraping({
-            url: url,
-            method: options.method || 'GET',
-            headers: {
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive',
-                ...options.headers
-            },
-            headerGeneratorOptions: {
-                browsers: [{ name: 'chrome', minVersion: 120 }],
-                devices: ['desktop'],
-                locales: ['en-US']
-            },
-            timeout: { request: TIMEOUT },
-            retry: { limit: 2 },
-            ...options
-        });
-        return response;
-    } catch (error) {
-        if (error.response) {
-            throw new Error(`HTTP ${error.response.statusCode}: ${error.response.statusMessage}`);
+    let lastError;
+    const maxRetries = 3;
+    
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await gotScraping({
+                url: url,
+                method: options.method || 'GET',
+                headers: {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Connection': 'keep-alive',
+                    ...options.headers
+                },
+                headerGeneratorOptions: {
+                    browsers: [{ name: 'chrome', minVersion: 120 }],
+                    devices: ['desktop'],
+                    locales: ['en-US']
+                },
+                timeout: { request: TIMEOUT },
+                retry: { limit: 2 },
+                ...options
+            });
+            return response;
+        } catch (error) {
+            lastError = error;
+            console.log(`[DahmerMovies] Request failed (attempt ${i + 1}/${maxRetries}): ${error.message}`);
+            if (i < maxRetries - 1) {
+                const delay = Math.pow(2, i) * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
-        throw error;
     }
+    
+    if (lastError.response) {
+        throw new Error(`HTTP ${lastError.response.statusCode}: ${lastError.response.statusMessage}`);
+    }
+    throw lastError;
 }
 
 // Utility functions
