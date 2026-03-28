@@ -1,5 +1,5 @@
 // Dahmer Movies Scraper for Nuvio Local Scrapers
-// Refactored to use async/await and simple fetch to bypass Cloudflare issues on this domain
+// Refactored to use async/await and got-scraping with node-fetch fallback to bypass Cloudflare
 
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
@@ -7,7 +7,7 @@ const cheerio = require('cheerio');
 // Constants
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const DAHMER_MOVIES_API = 'https://a.111477.xyz';
-const TIMEOUT = 15000; // 15 seconds
+const TIMEOUT = 20000; // 20 seconds
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 
@@ -27,68 +27,92 @@ const Qualities = {
 // Global to track request time for throttling
 let lastDahmerRequestTime = 0;
 
-// Helper function to make HTTP requests using got-scraping
+// Helper function to make HTTP requests using got-scraping with node-fetch fallback
 async function makeRequest(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
-    // Throttling: Implement a small delay between rapid consecutive calls (GEMINI.md mandate)
+    // Throttling: Implement a delay between rapid consecutive calls (GEMINI.md mandate)
     const now = Date.now();
     const diff = now - lastDahmerRequestTime;
-    if (diff < 500) {
-        await new Promise(resolve => setTimeout(resolve, 500 - diff));
+    if (diff < 1000) {
+        await new Promise(resolve => setTimeout(resolve, 1000 - diff));
     }
 
     let lastError;
-    const maxRetries = 3;
+    const maxRetries = 2; // Total retries for got-scraping
     
+    // Attempt with got-scraping first
     for (let i = 0; i < maxRetries; i++) {
         try {
-            console.log(`[DahmerMovies] Fetching: ${url} (Attempt ${i + 1}/${maxRetries})`);
+            console.log(`[DahmerMovies] Fetching (got-scraping): ${url} (Attempt ${i + 1}/${maxRetries})`);
             
             const response = await gotScraping({
                 url: url,
                 method: options.method || 'GET',
                 headers: {
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9',
                     'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
                     ...options.headers
                 },
                 headerGeneratorOptions: {
-                    browsers: [{ name: 'chrome' }],
+                    browsers: [{ name: 'chrome', minVersion: 110 }],
                     devices: ['desktop'],
-                    locales: ['en-US']
+                    locales: ['en-US', 'en']
                 },
-                timeout: { request: TIMEOUT },
-                retry: { limit: 2 },
+                timeout: { request: 20000 },
+                retry: { limit: 1 },
                 ...options
             });
             
             lastDahmerRequestTime = Date.now();
-            
             const body = response.body;
+            const pageTitle = body.match(/<title>(.*?)<\/title>/i)?.[1]?.toLowerCase() || "";
             
-            // Check for Cloudflare challenge or truncated response
-            if (body.includes('cf-challenge') || body.includes('challenge-platform') || body.includes('Just a moment')) {
-                throw new Error('Cloudflare challenge detected');
-            }
-            
-            if (body.length < 5000 || !body.toLowerCase().includes('</html>')) {
-                throw new Error(`Response truncated or suspiciously small (length: ${body.length})`);
+            if (body.includes('cf-challenge') || body.includes('Just a moment') || pageTitle.includes('just a moment') || body.length < 6000) {
+                console.log(`[DahmerMovies] got-scraping returned challenge or small body (${body.length})`);
+                throw new Error('Cloudflare/Truncated');
             }
 
             return { body, status: response.statusCode };
         } catch (error) {
             lastError = error;
-            console.log(`[DahmerMovies] Request failed: ${error.message}`);
-            if (i < maxRetries - 1) {
-                const delay = Math.pow(2, i) * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
+            console.log(`[DahmerMovies] got-scraping attempt failed: ${error.message}`);
+            if (i < maxRetries - 1) await new Promise(r => setTimeout(r, 2000));
         }
     }
-    
-    throw lastError;
+
+    // Fallback to node-fetch (the 4khdhub.js method)
+    console.log(`[DahmerMovies] Falling back to node-fetch for: ${url}`);
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': USER_AGENT,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                ...options.headers
+            },
+            timeout: 15000
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const body = await response.text();
+        const pageTitle = body.match(/<title>(.*?)<\/title>/i)?.[1]?.toLowerCase() || "";
+        
+        if (body.length > 6000 && body.toLowerCase().includes('</html>') && !pageTitle.includes('just a moment')) {
+            console.log(`[DahmerMovies] node-fetch success (length: ${body.length})`);
+            return { body, status: response.status };
+        }
+        throw new Error(`node-fetch also returned challenge or small body (${body.length})`);
+    } catch (error) {
+        console.log(`[DahmerMovies] node-fetch fallback failed: ${error.message}`);
+        throw lastError; // Throw the original got-scraping error if fallback also fails
+    }
 }
 
 // Utility functions
@@ -213,18 +237,89 @@ function parseLinks(html) {
     return links;
 }
 
+function levenshteinDistance(s, t) {
+    if (s === t) return 0;
+    const n = s.length;
+    const m = t.length;
+    if (n === 0) return m;
+    if (m === 0) return n;
+    const d = [];
+    for (let i = 0; i <= n; i++) {
+        d[i] = [];
+        d[i][0] = i;
+    }
+    for (let j = 0; j <= m; j++) {
+        d[0][j] = j;
+    }
+    for (let i = 1; i <= n; i++) {
+        for (let j = 1; j <= m; j++) {
+            const cost = s.charAt(i - 1) === t.charAt(j - 1) ? 0 : 1;
+            d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+        }
+    }
+    return d[n][m];
+}
+
 // Main Dahmer Movies fetcher function
 async function invokeDahmerMovies(title, year, season = null, episode = null) {
     const mediaContext = season === null ? `movie` : `tv`;
     console.log(`Step 2: Database/Provider Lookup (${mediaContext})`);
     console.log(`[DahmerMovies] Searching for: ${title} (${year})${season ? ` Season ${season}` : ''}${episode ? ` Episode ${episode}` : ''}`);
     
-    const encodedUrl = season === null 
-        ? `${DAHMER_MOVIES_API}/movies/${encodeURIComponent(title.replace(/:/g, '') + ' (' + year + ')')}/`
-        : `${DAHMER_MOVIES_API}/tvs/${encodeURIComponent(title.replace(/:/g, ' -'))}/Season ${season}/`;
+    // Step 2a: Find the correct directory using fuzzy matching
+    const searchBaseUrl = season === null ? `${DAHMER_MOVIES_API}/movies/` : `${DAHMER_MOVIES_API}/tvs/`;
+    let folderUrl;
     
     try {
-        const { body: html } = await makeRequest(encodedUrl);
+        const { body: listHtml } = await makeRequest(searchBaseUrl);
+        const folders = parseLinks(listHtml);
+        
+        const targetName = season === null 
+            ? `${title} (${year})`.toLowerCase()
+            : title.toLowerCase();
+            
+        let bestMatch = null;
+        let minDistance = 10; // Threshold for fuzzy match
+        
+        for (const folder of folders) {
+            const folderName = folder.text.replace(/\/$/, '').toLowerCase();
+            const distance = levenshteinDistance(folderName, targetName);
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                bestMatch = folder;
+            }
+            
+            // Exact match including cleanup
+            const cleanFolderName = folderName.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
+            const cleanTargetName = targetName.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (cleanFolderName === cleanTargetName) {
+                bestMatch = folder;
+                break;
+            }
+        }
+        
+        if (!bestMatch) {
+            console.log(`[DahmerMovies] No matching folder found for "${targetName}"`);
+            return [];
+        }
+        
+        console.log(`[DahmerMovies] Found best match folder: "${bestMatch.text}"`);
+        
+        if (season === null) {
+            folderUrl = bestMatch.href.startsWith('http') ? bestMatch.href : `${DAHMER_MOVIES_API}${bestMatch.href}`;
+        } else {
+            const tvBaseUrl = bestMatch.href.startsWith('http') ? bestMatch.href : `${DAHMER_MOVIES_API}${bestMatch.href}`;
+            folderUrl = `${tvBaseUrl.endsWith('/') ? tvBaseUrl : tvBaseUrl + '/'}Season ${season}/`;
+        }
+        
+    } catch (error) {
+        console.log(`[DahmerMovies] Error finding folder: ${error.message}`);
+        return [];
+    }
+    
+    try {
+        const { body: html } = await makeRequest(folderUrl);
         
         console.log(`[DahmerMovies] Response length: ${html.length}`);
         
@@ -264,7 +359,7 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
             } else if (path.href.startsWith('/')) {
                 fullUrl = `${DAHMER_MOVIES_API}${path.href}`;
             } else {
-                const baseUrl = encodedUrl.endsWith('/') ? encodedUrl : encodedUrl + '/';
+                const baseUrl = folderUrl.endsWith('/') ? folderUrl : folderUrl + '/';
                 fullUrl = baseUrl + path.href;
             }
             
