@@ -1,12 +1,15 @@
 // Dahmer Movies Scraper for Nuvio Local Scrapers
-// Refactored to use async/await and got-scraping for stealth metadata retrieval
+// Refactored to use async/await and simple fetch to bypass Cloudflare issues on this domain
 
+const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 
 // Constants
 const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 const DAHMER_MOVIES_API = 'https://a.111477.xyz';
-const TIMEOUT = 60000; // 60 seconds
+const TIMEOUT = 15000; // 15 seconds
+
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
 
 // Quality mapping
 const Qualities = {
@@ -21,35 +24,38 @@ const Qualities = {
     P2160: 2160
 };
 
+// Global to track request time for throttling
+let lastDahmerRequestTime = 0;
+
 // Helper function to make HTTP requests using got-scraping
 async function makeRequest(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
+    // Throttling: Implement a small delay between rapid consecutive calls (GEMINI.md mandate)
+    const now = Date.now();
+    const diff = now - lastDahmerRequestTime;
+    if (diff < 500) {
+        await new Promise(resolve => setTimeout(resolve, 500 - diff));
+    }
+
     let lastError;
     const maxRetries = 3;
     
-    // Throttling: Implement a small delay between rapid consecutive calls to avoid rate limits (GEMINI.md mandate)
-    if (global.lastDahmerRequestTime) {
-        const now = Date.now();
-        const diff = now - global.lastDahmerRequestTime;
-        if (diff < 200) {
-            await new Promise(resolve => setTimeout(resolve, 200 - diff));
-        }
-    }
-    
     for (let i = 0; i < maxRetries; i++) {
         try {
+            console.log(`[DahmerMovies] Fetching: ${url} (Attempt ${i + 1}/${maxRetries})`);
+            
             const response = await gotScraping({
                 url: url,
                 method: options.method || 'GET',
                 headers: {
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Language': 'en-US,en;q=0.9',
                     'Connection': 'keep-alive',
                     ...options.headers
                 },
                 headerGeneratorOptions: {
-                    browsers: [{ name: 'chrome', minVersion: 120 }],
+                    browsers: [{ name: 'chrome' }],
                     devices: ['desktop'],
                     locales: ['en-US']
                 },
@@ -58,29 +64,23 @@ async function makeRequest(url, options = {}) {
                 ...options
             });
             
-            global.lastDahmerRequestTime = Date.now();
-
-            // Check for truncated responses (common on this server)
+            lastDahmerRequestTime = Date.now();
+            
             const body = response.body;
-            if (typeof body === 'string' && body.length > 0) {
-                const trimmedBody = body.trim();
-                const isHtml = trimmedBody.startsWith('<');
-                if (isHtml) {
-                    const hasClosingTag = trimmedBody.toLowerCase().endsWith('</html>');
-                    // Directory listings with actual files should be reasonably large.
-                    // Empty or error listings on this server are often around 5-6KB.
-                    const isTooSmall = body.length < 8000; 
-                    
-                    if (!hasClosingTag || isTooSmall) {
-                        throw new Error(`Response truncated or suspiciously small (length: ${body.length}, hasClosingTag: ${hasClosingTag})`);
-                    }
-                }
+            
+            // Check for Cloudflare challenge or truncated response
+            if (body.includes('cf-challenge') || body.includes('challenge-platform') || body.includes('Just a moment')) {
+                throw new Error('Cloudflare challenge detected');
+            }
+            
+            if (body.length < 5000 || !body.toLowerCase().includes('</html>')) {
+                throw new Error(`Response truncated or suspiciously small (length: ${body.length})`);
             }
 
-            return response;
+            return { body, status: response.statusCode };
         } catch (error) {
             lastError = error;
-            console.log(`[DahmerMovies] Request failed (attempt ${i + 1}/${maxRetries}): ${error.message}`);
+            console.log(`[DahmerMovies] Request failed: ${error.message}`);
             if (i < maxRetries - 1) {
                 const delay = Math.pow(2, i) * 1000;
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -88,9 +88,6 @@ async function makeRequest(url, options = {}) {
         }
     }
     
-    if (lastError.response) {
-        throw new Error(`HTTP ${lastError.response.statusCode}: ${lastError.response.statusMessage}`);
-    }
     throw lastError;
 }
 
@@ -118,7 +115,7 @@ function getQualityWithCodecs(str) {
     const qualityMatch = str.match(/(\d{3,4})[pP]/);
     const baseQuality = qualityMatch ? `${qualityMatch[1]}p` : 'Unknown';
     
-    // Extract codec information (excluding HEVC and bit depth)
+    // Extract codec information
     const codecs = [];
     const lowerStr = str.toLowerCase();
     
@@ -131,7 +128,7 @@ function getQualityWithCodecs(str) {
     if (lowerStr.includes('remux')) codecs.push('REMUX');
     if (lowerStr.includes('imax')) codecs.push('IMAX');
     
-    // Combine quality with codecs using pipeline separator
+    // Combine quality with codecs
     if (codecs.length > 0) {
         return `${baseQuality} | ${codecs.join(' | ')}`;
     }
@@ -155,12 +152,10 @@ function getIndexQualityTags(str, fullTag = false) {
 function formatFileSize(sizeInput) {
     if (!sizeInput) return null;
     
-    // If it's already formatted (contains GB, MB, etc.), return as is
     if (typeof sizeInput === 'string' && /\d+(\.\d+)?\s*(GB|MB|KB|TB)/i.test(sizeInput)) {
         return sizeInput;
     }
     
-    // If it's a number (bytes), convert to human readable
     const bytes = parseInt(sizeInput);
     if (isNaN(bytes) || bytes < 0) return sizeInput;
     
@@ -184,7 +179,6 @@ function parseLinks(html) {
         const href = link.attr('href');
         const text = link.text().trim();
         
-        // Extract size from data-sort or text
         let size = row.find('td.size').attr('data-sort');
         if (!size || size === "-1") {
             size = row.find('td.size').text().trim();
@@ -195,7 +189,6 @@ function parseLinks(html) {
         }
     });
     
-    // Fallback if no data-entry rows found
     if (links.length === 0) {
         $('tr').each((i, el) => {
             const row = $(el);
@@ -205,7 +198,6 @@ function parseLinks(html) {
             
             if (!text || href === '../' || text === '../') return;
 
-            // Try to find size in the same row
             let size = null;
             row.find('td').each((j, td) => {
                 const tdText = $(td).text().trim();
@@ -227,43 +219,25 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
     console.log(`Step 2: Database/Provider Lookup (${mediaContext})`);
     console.log(`[DahmerMovies] Searching for: ${title} (${year})${season ? ` Season ${season}` : ''}${episode ? ` Episode ${episode}` : ''}`);
     
-    // Construct URL based on content type (with proper encoding)
     const encodedUrl = season === null 
         ? `${DAHMER_MOVIES_API}/movies/${encodeURIComponent(title.replace(/:/g, '') + ' (' + year + ')')}/`
         : `${DAHMER_MOVIES_API}/tvs/${encodeURIComponent(title.replace(/:/g, ' -'))}/Season ${season}/`;
     
-    console.log(`[DahmerMovies] Fetching from: ${encodedUrl}`);
-    
     try {
-        const response = await makeRequest(encodedUrl);
-        const html = response.body;
+        const { body: html } = await makeRequest(encodedUrl);
         
         console.log(`[DahmerMovies] Response length: ${html.length}`);
         
-        // Double check for truncation/suspiciously small body in case makeRequest didn't catch it
-        const trimmedHtml = typeof html === 'string' ? html.trim() : '';
-        const isHtml = trimmedHtml.startsWith('<');
-        if (isHtml) {
-            const hasClosingTag = trimmedHtml.toLowerCase().endsWith('</html>');
-            if (!hasClosingTag || html.length < 8000) {
-                throw new Error(`Response body is incomplete/suspiciously small (length: ${html.length}, hasClosingTag: ${hasClosingTag})`);
-            }
-        }
-        
-        // Parse HTML to extract links
         const paths = parseLinks(html);
         console.log(`[DahmerMovies] Found ${paths.length} total links`);
         
-        // Filter based on content type
         let filteredPaths;
         if (season === null) {
-            // For movies, filter by quality (1080p or 2160p)
             filteredPaths = paths.filter(path => 
                 /(1080p|2160p)/i.test(path.text)
             );
             console.log(`[DahmerMovies] Filtered to ${filteredPaths.length} movie links (1080p/2160p only)`);
         } else {
-            // For TV shows, filter by season and episode
             const [seasonSlug, episodeSlug] = getEpisodeSlug(season, episode);
             const episodePattern = new RegExp(`S${seasonSlug}E${episodeSlug}`, 'i');
             filteredPaths = paths.filter(path => 
@@ -279,21 +253,17 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
         
         console.log(`Step 3: Stream Resolution`);
         
-        // Process and return results
         const results = filteredPaths.map(path => {
             const quality = getIndexQuality(path.text);
             const qualityWithCodecs = getQualityWithCodecs(path.text);
             const tags = getIndexQualityTags(path.text);
             
-            // Construct proper URL - handle relative and absolute paths correctly
             let fullUrl;
             if (path.href.startsWith('http')) {
                 fullUrl = path.href;
             } else if (path.href.startsWith('/')) {
-                // Absolute path from root
                 fullUrl = `${DAHMER_MOVIES_API}${path.href}`;
             } else {
-                // Relative path
                 const baseUrl = encodedUrl.endsWith('/') ? encodedUrl : encodedUrl + '/';
                 fullUrl = baseUrl + path.href;
             }
@@ -302,10 +272,10 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
                 name: "DahmerMovies",
                 title: `DahmerMovies ${tags || path.text}`,
                 url: fullUrl,
-                quality: qualityWithCodecs, // Use enhanced quality with codecs
-                size: formatFileSize(path.size), // Format file size
-                headers: {}, // No special headers needed for direct downloads
-                provider: "dahmermovies", // Provider identifier
+                quality: qualityWithCodecs,
+                size: formatFileSize(path.size),
+                headers: { 'User-Agent': USER_AGENT },
+                provider: "dahmermovies",
                 filename: path.text,
                 behaviorHints: {
                     bingeGroup: `DahmerMovies-${path.text.includes('2160p') ? '4K' : 'HD'}`
@@ -313,7 +283,6 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
             };
         });
         
-        // Sort by quality (highest first)
         results.sort((a, b) => {
             const qualityA = getIndexQuality(a.filename);
             const qualityB = getIndexQuality(b.filename);
@@ -334,10 +303,9 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
     console.log(`[DahmerMovies] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}${seasonNum ? `, S${seasonNum}E${episodeNum}` : ''}`);
 
     try {
-        // Get TMDB info
         const tmdbUrl = `https://api.themoviedb.org/3/${mediaType === 'tv' ? 'tv' : 'movie'}/${tmdbId}?api_key=${TMDB_API_KEY}`;
-        const tmdbResponse = await makeRequest(tmdbUrl, { responseType: 'json' });
-        const tmdbData = tmdbResponse.body;
+        const response = await fetch(tmdbUrl);
+        const tmdbData = await response.json();
         
         const title = mediaType === 'tv' ? tmdbData.name : tmdbData.title;
         const year = mediaType === 'tv' ? tmdbData.first_air_date?.substring(0, 4) : tmdbData.release_date?.substring(0, 4);
@@ -348,7 +316,6 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
 
         console.log(`[DahmerMovies] TMDB Info: "${title}" (${year})`);
 
-        // Call the main scraper function
         return await invokeDahmerMovies(
             title,
             year ? parseInt(year) : null,
@@ -362,12 +329,4 @@ async function getStreams(tmdbId, mediaType = 'movie', seasonNum = null, episode
     }
 }
 
-// Export the main function
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { getStreams };
-} else {
-    // For environment where module is not defined (if applicable)
-    if (typeof global !== 'undefined') {
-        global.getStreams = getStreams;
-    }
-}
+module.exports = { getStreams };
