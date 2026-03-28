@@ -167,6 +167,10 @@ async function decryptVideoEasy(encryptedText, tmdbId) {
         });
         
         const data = JSON.parse(response.body);
+        if (!data || !data.result) {
+            console.log(`[VideoEasy] Step 4: Decryption returned empty result for ${tmdbId}`);
+            return null;
+        }
         return data.result;
     } catch (error) {
         console.error(`[VideoEasy] Step 4: Decryption failed: ${error.message}`);
@@ -283,8 +287,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
         console.log(`[VideoEasy] TMDB Info: "${mediaDetails.title}" (${mediaDetails.year})`);
 
-        const serverPromises = Object.keys(SERVERS).map(serverName => {
-            return fetchFromServer(
+        const allStreams = [];
+        for (const serverName of Object.keys(SERVERS)) {
+            const streams = await fetchFromServer(
                 serverName,
                 SERVERS[serverName],
                 mediaDetails.mediaType,
@@ -295,10 +300,8 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                 seasonNum,
                 episodeNum
             );
-        });
-
-        const results = await Promise.all(serverPromises);
-        const allStreams = results.flat();
+            allStreams.push(...streams);
+        }
 
         // Unique by URL
         const uniqueStreams = [];
