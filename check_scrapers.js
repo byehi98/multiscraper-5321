@@ -8,7 +8,7 @@ const files = [
   // "./src/scrapers/hdhub4u",
   // "./src/scrapers/hdrezka",
   // "./src/scrapers/mallumv",
-  "./src/scrapers/mapple",
+  // "./src/scrapers/mapple",
   "./src/scrapers/moviebox",
   "./src/scrapers/moviesmod",
   "./src/scrapers/myflixer-extractor",
