@@ -28,6 +28,15 @@ async function makeRequest(url, options = {}) {
     let lastError;
     const maxRetries = 3;
     
+    // Throttling: Implement a small delay between rapid consecutive calls to avoid rate limits (GEMINI.md mandate)
+    if (global.lastDahmerRequestTime) {
+        const now = Date.now();
+        const diff = now - global.lastDahmerRequestTime;
+        if (diff < 200) {
+            await new Promise(resolve => setTimeout(resolve, 200 - diff));
+        }
+    }
+    
     for (let i = 0; i < maxRetries; i++) {
         try {
             const response = await gotScraping({
@@ -48,6 +57,21 @@ async function makeRequest(url, options = {}) {
                 retry: { limit: 2 },
                 ...options
             });
+            
+            global.lastDahmerRequestTime = Date.now();
+
+            // Check for truncated responses (common on this server)
+            const body = response.body;
+            if (typeof body === 'string' && body.length > 0) {
+                const isHtml = body.trim().startsWith('<!DOCTYPE') || body.trim().startsWith('<html');
+                if (isHtml) {
+                    const isTruncated = !body.toLowerCase().includes('</html>');
+                    if (isTruncated) {
+                        throw new Error(`Response truncated (length: ${body.length})`);
+                    }
+                }
+            }
+
             return response;
         } catch (error) {
             lastError = error;
