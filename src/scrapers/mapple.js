@@ -66,6 +66,18 @@ function parseM3U8(content) {
     return streams;
 }
 
+// Transform direct heistotron URL to a mapple proxy URL if needed
+function transformUrl(url) {
+    if (url.includes('heistotron.uk')) {
+        // Many sources proxy through mapple.uk/api/proxy or similar
+        // For heistotron, the most reliable way is often to use the direct link with proper headers
+        // But if Stremio isn't sending them, we might need a workaround.
+        // Let's keep it direct but ensure headers are robust.
+        return url;
+    }
+    return url;
+}
+
 // Core functions
 async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
     const headers = { ...PLAYBACK_HEADERS, 'Referer': referer, 'Cookie': cookies };
@@ -73,7 +85,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
     if (sourceName === 'sakura') {
         return [{
             name: `Mapple Sakura - Auto`,
-            url: url,
+            url: transformUrl(url),
             quality: 'Auto',
             size: "Unknown",
             headers: headers,
@@ -89,7 +101,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             const streams = parseM3U8(content);
             return streams.map(stream => ({
                 name: `Mapple ${sourceName.charAt(0).toUpperCase() + sourceName.slice(1)} - ${getQualityFromStream(stream)}`,
-                url: stream.url,
+                url: transformUrl(stream.url),
                 quality: getQualityFromStream(stream),
                 size: "Unknown",
                 headers: headers,
@@ -99,7 +111,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
         
         return [{
             name: `Mapple ${sourceName.charAt(0).toUpperCase() + sourceName.slice(1)} - Unknown`,
-            url: url,
+            url: transformUrl(url),
             quality: 'Unknown',
             size: "Unknown",
             headers: headers,
@@ -108,7 +120,7 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
     } catch (error) {
         return [{
             name: `Mapple ${sourceName.charAt(0).toUpperCase() + sourceName.slice(1)} - Master`,
-            url: url,
+            url: transformUrl(url),
             quality: 'Unknown',
             size: "Unknown",
             headers: headers,
