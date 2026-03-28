@@ -63,10 +63,11 @@ async function makeRequest(url, options = {}) {
             // Check for truncated responses (common on this server)
             const body = response.body;
             if (typeof body === 'string' && body.length > 0) {
-                const isHtml = body.trim().startsWith('<!DOCTYPE') || body.trim().startsWith('<html');
+                const trimmedBody = body.trim();
+                const isHtml = trimmedBody.startsWith('<');
                 if (isHtml) {
-                    const isTruncated = !body.toLowerCase().includes('</html>');
-                    if (isTruncated) {
+                    const hasClosingTag = trimmedBody.toLowerCase().endsWith('</html>');
+                    if (!hasClosingTag) {
                         throw new Error(`Response truncated (length: ${body.length})`);
                     }
                 }
@@ -234,6 +235,11 @@ async function invokeDahmerMovies(title, year, season = null, episode = null) {
         const html = response.body;
         
         console.log(`[DahmerMovies] Response length: ${html.length}`);
+        
+        // Double check for truncation in case makeRequest didn't catch it
+        if (typeof html === 'string' && html.trim().startsWith('<') && !html.trim().toLowerCase().endsWith('</html>')) {
+            throw new Error(`Response body is incomplete/truncated (length: ${html.length})`);
+        }
         
         // Parse HTML to extract links
         const paths = parseLinks(html);
