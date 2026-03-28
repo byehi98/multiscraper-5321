@@ -1,484 +1,473 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>MultiScraper Streams+ Configuration</title>
-        <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family:
-                    "Inter",
-                    -apple-system,
-                    BlinkMacSystemFont,
-                    "Segoe UI",
-                    sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 20px;
-                color: #fff;
-            }
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MultiScraper Streams+ Configuration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-            .container {
-                max-width: 900px;
-                width: 100%;
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                border-radius: 20px;
-                padding: 40px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-            }
+        body {
+            font-family:
+                "Inter",
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }
 
-            h1 {
-                font-size: 2.5rem;
-                font-weight: 700;
-                margin-bottom: 10px;
-                text-align: center;
-                background: linear-gradient(135deg, #fff 0%, #e0e7ff 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 15px;
-            }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
 
-            .app-icon {
-                width: 56px;
-                height: 56px;
-                border-radius: 12px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-align: center;
+            background: linear-gradient(135deg, #fff 0%, #e0e7ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
 
-            .subtitle {
-                text-align: center;
-                font-size: 1.1rem;
-                color: rgba(255, 255, 255, 0.8);
-                margin-bottom: 30px;
-            }
+        .app-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
 
-            .info-box {
-                background: rgba(255, 255, 255, 0.15);
-                border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 30px;
-                border-left: 4px solid #4ade80;
-            }
+        .subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 30px;
+        }
 
-            .info-box p {
-                line-height: 1.6;
-                color: rgba(255, 255, 255, 0.9);
-            }
+        .info-box {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #4ade80;
+        }
 
-            .controls {
-                display: flex;
-                gap: 15px;
-                margin-bottom: 25px;
-                flex-wrap: wrap;
-            }
+        .info-box p {
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
 
-            .btn {
-                padding: 12px 24px;
-                border: none;
-                border-radius: 10px;
-                font-size: 1rem;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                font-family: "Inter", sans-serif;
-                text-decoration: none;
-                display: inline-block;
-            }
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
 
-            .btn-primary {
-                background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-                color: white;
-                flex: 1;
-            }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: "Inter", sans-serif;
+            text-decoration: none;
+            display: inline-block;
+        }
 
-            .btn-primary:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
-            }
+        .btn-primary {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+            flex: 1;
+        }
 
-            .btn-secondary {
-                background: rgba(255, 255, 255, 0.2);
-                color: white;
-                flex: 1;
-            }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
+        }
 
-            .btn-secondary:hover {
-                background: rgba(255, 255, 255, 0.3);
-                transform: translateY(-2px);
-            }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            flex: 1;
+        }
 
-            .install-buttons {
-                display: flex;
-                gap: 15px;
-                margin-top: 20px;
-            }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
 
-            .btn-install {
-                background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-                color: white;
-                flex: 1;
-                font-size: 1.1rem;
-                padding: 16px;
-                border-radius: 12px;
-            }
+        .install-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
 
-            .btn-web {
-                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            }
+        .btn-install {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            flex: 1;
+            font-size: 1.1rem;
+            padding: 16px;
+            border-radius: 12px;
+        }
 
-            .btn-install:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
-            }
+        .btn-web {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
 
-            .btn-web:hover {
-                box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
-            }
+        .btn-install:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.5);
+        }
 
-            .btn-install:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-                transform: none;
-            }
+        .btn-web:hover {
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+        }
 
-            .scrapers-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                gap: 12px;
-                margin-bottom: 20px;
-            }
+        .btn-install:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-            .scraper-item {
-                background: rgba(255, 255, 255, 0.1);
-                border: 2px solid rgba(255, 255, 255, 0.2);
-                border-radius: 10px;
-                padding: 15px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                user-select: none;
-            }
+        .scrapers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
 
-            .scraper-item:hover {
-                background: rgba(255, 255, 255, 0.15);
-                border-color: rgba(255, 255, 255, 0.4);
-            }
+        .scraper-item {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
 
-            .scraper-item.selected {
-                background: rgba(74, 222, 128, 0.3);
-                border-color: #4ade80;
-                box-shadow: 0 4px 15px rgba(74, 222, 128, 0.3);
-            }
+        .scraper-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
 
-            .scraper-item input[type="checkbox"] {
-                display: none;
-            }
+        .scraper-item.selected {
+            background: rgba(74, 222, 128, 0.3);
+            border-color: #4ade80;
+            box-shadow: 0 4px 15px rgba(74, 222, 128, 0.3);
+        }
 
-            .scraper-item label {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                cursor: pointer;
-                font-weight: 500;
-            }
+        .scraper-item input[type="checkbox"] {
+            display: none;
+        }
 
-            .checkbox-custom {
-                width: 20px;
-                height: 20px;
-                border: 2px solid rgba(255, 255, 255, 0.5);
-                border-radius: 5px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: all 0.3s ease;
-            }
+        .scraper-item label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-weight: 500;
+        }
 
-            .scraper-item.selected .checkbox-custom {
-                background: #4ade80;
-                border-color: #4ade80;
-            }
+        .checkbox-custom {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
 
-            .checkbox-custom::after {
-                content: "✓";
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            }
+        .scraper-item.selected .checkbox-custom {
+            background: #4ade80;
+            border-color: #4ade80;
+        }
 
-            .scraper-item.selected .checkbox-custom::after {
+        .checkbox-custom::after {
+            content: "✓";
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .scraper-item.selected .checkbox-custom::after {
+            opacity: 1;
+        }
+
+        .counter {
+            text-align: center;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            font-weight: 600;
+        }
+
+        .counter span {
+            color: #4ade80;
+            font-size: 1.3rem;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
                 opacity: 1;
             }
 
-            .counter {
-                text-align: center;
-                font-size: 1.1rem;
-                margin-bottom: 20px;
-                padding: 12px;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 10px;
-                font-weight: 600;
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .install-url {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            word-break: break-all;
+            font-family: "Courier New", monospace;
+            font-size: 0.9rem;
+            color: #a5f3fc;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 25px;
             }
 
-            .counter span {
-                color: #4ade80;
-                font-size: 1.3rem;
+            h1 {
+                font-size: 2rem;
             }
 
-            @keyframes pulse {
-                0%,
-                100% {
-                    opacity: 1;
-                }
-
-                50% {
-                    opacity: 0.7;
-                }
+            .scrapers-grid {
+                grid-template-columns: repeat(auto-fill,
+                        minmax(150px, 1fr));
             }
+        }
+    </style>
+</head>
 
-            .install-url {
-                background: rgba(0, 0, 0, 0.3);
-                padding: 15px;
-                border-radius: 10px;
-                margin-top: 20px;
-                word-break: break-all;
-                font-family: "Courier New", monospace;
-                font-size: 0.9rem;
-                color: #a5f3fc;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
+<body>
+    <div class="container">
+        <h1>
+            <img src="/assets/icon.png" alt="Icon" class="app-icon" />
+            MultiScraper Streams+
+        </h1>
+        <p class="subtitle">Configure your streaming sources</p>
 
-            @media (max-width: 768px) {
-                .container {
-                    padding: 25px;
-                }
-
-                h1 {
-                    font-size: 2rem;
-                }
-
-                .scrapers-grid {
-                    grid-template-columns: repeat(
-                        auto-fill,
-                        minmax(150px, 1fr)
-                    );
-                }
-            }
-        </style>
-    </head>
-
-    <body>
-        <div class="container">
-            <h1>
-                <img src="/assets/icon.png" alt="Icon" class="app-icon" />
-                MultiScraper Streams+
-            </h1>
-            <p class="subtitle">Configure your streaming sources</p>
-
-            <div class="info-box">
-                <p>
-                    Select the scrapers you want to use. By default, all
-                    scrapers are enabled. Choosing fewer scrapers may improve
-                    performance.
-                </p>
-            </div>
-
-            <div class="controls">
-                <button class="btn btn-secondary" onclick="selectAll()">
-                    Select All
-                </button>
-                <button class="btn btn-secondary" onclick="selectNone()">
-                    Select None
-                </button>
-            </div>
-
-            <div class="counter">
-                <span id="selectedCount">27</span> /
-                <span id="totalCount">27</span> scrapers selected
-            </div>
-
-            <div class="scrapers-grid" id="scrapersGrid">
-                <!-- Scrapers will be populated here -->
-            </div>
-
-            <div class="install-buttons">
-                <button
-                    class="btn btn-install"
-                    id="btnInstallClient"
-                    onclick="installClient()"
-                >
-                    Install on Device
-                </button>
-                <button
-                    class="btn btn-install btn-web"
-                    id="btnInstallWeb"
-                    onclick="installWeb()"
-                >
-                    Install on Web
-                </button>
-            </div>
-
-            <div class="install-url" id="installUrl" style="display: none">
-                Click the button above or paste this URL in Stremio:
-                <span id="urlText"></span>
-            </div>
+        <div class="info-box">
+            <p>
+                Select the scrapers you want to use. By default, all
+                scrapers are enabled. Choosing fewer scrapers may improve
+                performance.
+            </p>
         </div>
 
-        <script>
-            const scrapers = [
-                "4KHDHub",
-                "AnimeKai",
-                "Castle",
-                "DahmerMovies",
-                "DVDPlay",
-                "HDHub4u",
-                "HDRezka",
-                "MalluMV",
-                "Mapple",
-                "MovieBox",
-                "MoviesMod",
-                "MyFlixer",
-                "NetMirror",
-                "ShowBox",
-                "StreamFlix",
-                "UHDMovies",
-                "Videasy",
-                "VidLink",
-                "VidNest",
-                "VidNest-Anime",
-                "VidRock",
-                "VidSrc",
-                "VixSrc",
-                "Watch32",
-                "XPrime",
-                "YFlix",
-            ];
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="selectAll()">
+                Select All
+            </button>
+            <button class="btn btn-secondary" onclick="selectNone()">
+                Select None
+            </button>
+        </div>
 
-            let selectedScrapers = new Set(scrapers);
+        <div class="counter">
+            <span id="selectedCount">27</span> /
+            <span id="totalCount">27</span> scrapers selected
+        </div>
 
-            function initScrapers() {
-                const grid = document.getElementById("scrapersGrid");
-                document.getElementById("totalCount").textContent =
-                    scrapers.length;
+        <div class="scrapers-grid" id="scrapersGrid">
+            <!-- Scrapers will be populated here -->
+        </div>
 
-                scrapers.forEach((scraper) => {
-                    const div = document.createElement("div");
-                    div.className = "scraper-item selected";
-                    div.innerHTML = `
+        <div class="install-buttons">
+            <button class="btn btn-install" id="btnInstallClient" onclick="installClient()">
+                Install on Device
+            </button>
+            <button class="btn btn-install btn-web" id="btnInstallWeb" onclick="installWeb()">
+                Install on Web
+            </button>
+        </div>
+
+        <div class="install-url" id="installUrl" style="display: none">
+            Click the button above or paste this URL in Stremio:
+            <span id="urlText"></span>
+        </div>
+    </div>
+
+    <script>
+        const scrapers = [
+            "4KHDHub",
+            "AnimeKai",
+            "Castle",
+            "DVDPlay",
+            "HDHub4u",
+            "HDRezka",
+            "MalluMV",
+            "Mapple",
+            "MovieBox",
+            "MoviesMod",
+            "MyFlixer",
+            "NetMirror",
+            "ShowBox",
+            "StreamFlix",
+            "UHDMovies",
+            "Videasy",
+            "VidLink",
+            "VidNest",
+            "VidNest-Anime",
+            "VidRock",
+            "VidSrc",
+            "VixSrc",
+            "Watch32",
+            "XPrime",
+            "YFlix",
+        ];
+
+        let selectedScrapers = new Set(scrapers);
+
+        function initScrapers() {
+            const grid = document.getElementById("scrapersGrid");
+            document.getElementById("totalCount").textContent =
+                scrapers.length;
+
+            scrapers.forEach((scraper) => {
+                const div = document.createElement("div");
+                div.className = "scraper-item selected";
+                div.innerHTML = `
                     <label>
                         <div class="checkbox-custom"></div>
                         <span>${scraper}</span>
                     </label>
                 `;
-                    div.onclick = () => toggleScraper(scraper, div);
-                    grid.appendChild(div);
-                });
+                div.onclick = () => toggleScraper(scraper, div);
+                grid.appendChild(div);
+            });
 
-                updateCounter();
+            updateCounter();
+        }
+
+        function toggleScraper(scraper, element) {
+            if (selectedScrapers.has(scraper)) {
+                selectedScrapers.delete(scraper);
+                element.classList.remove("selected");
+            } else {
+                selectedScrapers.add(scraper);
+                element.classList.add("selected");
             }
+            updateCounter();
+        }
 
-            function toggleScraper(scraper, element) {
-                if (selectedScrapers.has(scraper)) {
-                    selectedScrapers.delete(scraper);
-                    element.classList.remove("selected");
-                } else {
-                    selectedScrapers.add(scraper);
-                    element.classList.add("selected");
-                }
-                updateCounter();
+        function selectAll() {
+            selectedScrapers = new Set(scrapers);
+            document.querySelectorAll(".scraper-item").forEach((el) => {
+                el.classList.add("selected");
+            });
+            updateCounter();
+        }
+
+        function selectNone() {
+            selectedScrapers.clear();
+            document.querySelectorAll(".scraper-item").forEach((el) => {
+                el.classList.remove("selected");
+            });
+            updateCounter();
+        }
+
+        function updateCounter() {
+            const count = selectedScrapers.size;
+            document.getElementById("selectedCount").textContent = count;
+
+            const btnClient = document.getElementById("btnInstallClient");
+            const btnWeb = document.getElementById("btnInstallWeb");
+
+            if (count === 0) {
+                btnClient.disabled = true;
+                btnWeb.disabled = true;
+            } else {
+                btnClient.disabled = false;
+                btnWeb.disabled = false;
             }
+        }
 
-            function selectAll() {
-                selectedScrapers = new Set(scrapers);
-                document.querySelectorAll(".scraper-item").forEach((el) => {
-                    el.classList.add("selected");
-                });
-                updateCounter();
-            }
+        function getManifestUrl() {
+            const config = {
+                scrapers: Array.from(selectedScrapers),
+            };
+            const configEncoded = btoa(JSON.stringify(config));
+            return `${window.location.origin}/${configEncoded}/manifest.json`;
+        }
 
-            function selectNone() {
-                selectedScrapers.clear();
-                document.querySelectorAll(".scraper-item").forEach((el) => {
-                    el.classList.remove("selected");
-                });
-                updateCounter();
-            }
+        function showUrl(url) {
+            document.getElementById("urlText").textContent = url;
+            document.getElementById("installUrl").style.display = "block";
+        }
 
-            function updateCounter() {
-                const count = selectedScrapers.size;
-                document.getElementById("selectedCount").textContent = count;
+        function installClient() {
+            if (selectedScrapers.size === 0) return;
 
-                const btnClient = document.getElementById("btnInstallClient");
-                const btnWeb = document.getElementById("btnInstallWeb");
+            const manifestUrl = getManifestUrl();
+            showUrl(manifestUrl);
 
-                if (count === 0) {
-                    btnClient.disabled = true;
-                    btnWeb.disabled = true;
-                } else {
-                    btnClient.disabled = false;
-                    btnWeb.disabled = false;
-                }
-            }
+            // Convert http(s) to stremio scheme
+            const stremioUrl = manifestUrl.replace(
+                /^https?:\/\//,
+                "stremio://",
+            );
+            window.location.href = stremioUrl;
+        }
 
-            function getManifestUrl() {
-                const config = {
-                    scrapers: Array.from(selectedScrapers),
-                };
-                const configEncoded = btoa(JSON.stringify(config));
-                return `${window.location.origin}/${configEncoded}/manifest.json`;
-            }
+        function installWeb() {
+            if (selectedScrapers.size === 0) return;
 
-            function showUrl(url) {
-                document.getElementById("urlText").textContent = url;
-                document.getElementById("installUrl").style.display = "block";
-            }
+            const manifestUrl = getManifestUrl();
+            showUrl(manifestUrl);
 
-            function installClient() {
-                if (selectedScrapers.size === 0) return;
+            // Redirect to Stremio Web
+            const webUrl = `https://web.stremio.com/#/addons?addon=${encodeURIComponent(manifestUrl)}`;
+            window.location.href = webUrl;
+        }
 
-                const manifestUrl = getManifestUrl();
-                showUrl(manifestUrl);
+        // Initialize on page load
+        initScrapers();
+    </script>
+</body>
 
-                // Convert http(s) to stremio scheme
-                const stremioUrl = manifestUrl.replace(
-                    /^https?:\/\//,
-                    "stremio://",
-                );
-                window.location.href = stremioUrl;
-            }
-
-            function installWeb() {
-                if (selectedScrapers.size === 0) return;
-
-                const manifestUrl = getManifestUrl();
-                showUrl(manifestUrl);
-
-                // Redirect to Stremio Web
-                const webUrl = `https://web.stremio.com/#/addons?addon=${encodeURIComponent(manifestUrl)}`;
-                window.location.href = webUrl;
-            }
-
-            // Initialize on page load
-            initScrapers();
-        </script>
-    </body>
 </html>
