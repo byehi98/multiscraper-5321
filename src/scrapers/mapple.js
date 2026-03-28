@@ -68,6 +68,7 @@ function parseM3U8(content) {
 
 // Transform direct heistotron URL to have an extension if missing
 function transformUrl(url) {
+    if (!url) return url;
     if (url.includes('heistotron.uk') && !url.includes('.m3u8')) {
         if (url.includes('?')) {
             const [base, query] = url.split('?');
@@ -89,6 +90,16 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             quality: 'Auto',
             size: "Unknown",
             headers: headers,
+            behaviorHints: {
+                notWebReady: true,
+                proxyHeaders: {
+                    request: {
+                        "Referer": "https://mapple.uk/",
+                        "Origin": "https://mapple.uk",
+                        "User-Agent": PLAYBACK_HEADERS["User-Agent"]
+                    }
+                }
+            },
             provider: "mapple"
         }];
     }
@@ -105,6 +116,16 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
                 quality: getQualityFromStream(stream),
                 size: "Unknown",
                 headers: headers,
+                behaviorHints: {
+                    notWebReady: true,
+                    proxyHeaders: {
+                        request: {
+                            "Referer": "https://mapple.uk/",
+                            "Origin": "https://mapple.uk",
+                            "User-Agent": PLAYBACK_HEADERS["User-Agent"]
+                        }
+                    }
+                },
                 provider: "mapple"
             }));
         }
@@ -115,6 +136,16 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             quality: 'Unknown',
             size: "Unknown",
             headers: headers,
+            behaviorHints: {
+                notWebReady: true,
+                proxyHeaders: {
+                    request: {
+                        "Referer": "https://mapple.uk/",
+                        "Origin": "https://mapple.uk",
+                        "User-Agent": PLAYBACK_HEADERS["User-Agent"]
+                    }
+                }
+            },
             provider: "mapple"
         }];
     } catch (error) {
@@ -124,6 +155,16 @@ async function resolveM3U8(gotScraping, url, sourceName, referer, cookies) {
             quality: 'Unknown',
             size: "Unknown",
             headers: headers,
+            behaviorHints: {
+                notWebReady: true,
+                proxyHeaders: {
+                    request: {
+                        "Referer": "https://mapple.uk/",
+                        "Origin": "https://mapple.uk",
+                        "User-Agent": PLAYBACK_HEADERS["User-Agent"]
+                    }
+                }
+            },
             provider: "mapple"
         }];
     }
@@ -175,7 +216,7 @@ async function fetchStreamsForSource(gotScraping, tmdbId, mediaType, seasonNum, 
         const streamUrl = streamData.data.stream_url.trim();
         if (streamUrl.includes('Content not found')) return [];
 
-        return await resolveM3U8(gotScraping, streamUrl, source, referer, cookies);
+        return await resolveM3U8(gotScraping, transformUrl(streamUrl), source, referer, cookies);
     } catch (error) {
         console.error(`[Mapple] Error fetching ${source}: ${error.message}`);
         return [];
