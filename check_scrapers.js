@@ -15,7 +15,7 @@ const files = [
   // "./src/scrapers/netmirror",
   // "./src/scrapers/showbox",
   "./src/scrapers/streamflix",
-  "./src/scrapers/uhdmovies",
+  // "./src/scrapers/uhdmovies",
   "./src/scrapers/videasy",
   "./src/scrapers/vidlink",
   "./src/scrapers/vidnest",
