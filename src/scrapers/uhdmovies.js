@@ -1,15 +1,18 @@
-const fetch = require('node-fetch');
+const fetch = require("node-fetch");
 /**
  * uhdmovies - Built from src/uhdmovies/
  * Generated: 2025-12-31T20:41:33.334Z
  */
-"use strict";
+("use strict");
 
 // src/uhdmovies/search.js
-var DOMAIN = "https://uhdmovies.rip";
+var DOMAIN = "https://uhdmovies.ink";
 var TMDB_API = "https://api.themoviedb.org/3";
 async function searchByImdbId(tmdbId, mediaType) {
-  const endpoint = mediaType === "movie" ? `${TMDB_API}/movie/${tmdbId}/external_ids` : `${TMDB_API}/tv/${tmdbId}/external_ids`;
+  const endpoint =
+    mediaType === "movie"
+      ? `${TMDB_API}/movie/${tmdbId}/external_ids`
+      : `${TMDB_API}/tv/${tmdbId}/external_ids`;
   const response = await fetch(endpoint);
   const data = await response.json();
   const imdbId = data.imdb_id;
@@ -29,7 +32,7 @@ function parseSearchResults(html) {
   $(".post-title a, .entry-title a").each((_, el) => {
     results.push({
       title: $(el).text().trim(),
-      url: $(el).attr("href")
+      url: $(el).attr("href"),
     });
   });
   return results;
@@ -42,9 +45,10 @@ async function extractHubCloud(url) {
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://uhdmovies.rip/"
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Referer: "https://uhdmovies.rip/",
+      },
     });
     const html = await response.text();
     const $ = cheerio.load(html);
@@ -53,7 +57,9 @@ async function extractHubCloud(url) {
       directUrl = $(el).attr("href");
     });
     if (!directUrl) {
-      const downloadBtn = $('a.btn-download, a[class*="download"]').attr("href");
+      const downloadBtn = $('a.btn-download, a[class*="download"]').attr(
+        "href",
+      );
       if (downloadBtn) {
         directUrl = downloadBtn;
       }
@@ -69,9 +75,10 @@ async function extractHubCloud(url) {
       return {
         url: directUrl,
         headers: {
-          "Referer": url,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
+          Referer: url,
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
       };
     }
     return null;
@@ -84,13 +91,12 @@ async function extractGDrive(url) {
   console.log("[UHDMovies] Extracting GDrive:", url);
   try {
     const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (!fileIdMatch)
-      return null;
+    if (!fileIdMatch) return null;
     const fileId = fileIdMatch[1];
     const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     return {
       url: directUrl,
-      headers: {}
+      headers: {},
     };
   } catch (error) {
     console.error("[UHDMovies] GDrive extraction failed:", error.message);
@@ -101,7 +107,11 @@ async function extractGDrive(url) {
 // src/uhdmovies/utils.js
 function parseQuality(text) {
   const normalized = text.toUpperCase();
-  if (normalized.includes("2160") || normalized.includes("4K") || normalized.includes("UHD")) {
+  if (
+    normalized.includes("2160") ||
+    normalized.includes("4K") ||
+    normalized.includes("UHD")
+  ) {
     return "2160p";
   }
   if (normalized.includes("1080")) {
@@ -131,7 +141,12 @@ async function getStreams(tmdbId, mediaType, season, episode) {
       return [];
     }
     for (const result of searchResults) {
-      const links = await getDownloadLinks(result.url, mediaType, season, episode);
+      const links = await getDownloadLinks(
+        result.url,
+        mediaType,
+        season,
+        episode,
+      );
       for (const link of links) {
         try {
           let extracted;
@@ -146,11 +161,14 @@ async function getStreams(tmdbId, mediaType, season, episode) {
               url: extracted.url,
               quality: link.quality,
               size: link.size,
-              headers: extracted.headers
+              headers: extracted.headers,
             });
           }
         } catch (e) {
-          console.error(`[UHDMovies] Failed to extract ${link.url}:`, e.message);
+          console.error(
+            `[UHDMovies] Failed to extract ${link.url}:`,
+            e.message,
+          );
         }
       }
     }
@@ -171,7 +189,7 @@ async function getDownloadLinks(pageUrl, mediaType, season, episode) {
     links.push({
       url: href,
       quality,
-      size: extractSize(text)
+      size: extractSize(text),
     });
   });
   return links;
