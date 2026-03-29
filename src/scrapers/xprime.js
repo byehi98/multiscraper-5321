@@ -418,14 +418,13 @@ function makeRequest(url, options = {}) {
 }
 
 // Get turnstile token for Xprime authentication
-function getTurnstileToken() {
+function getTurnstileToken(userAgent) {
   console.log("[Xprime] Fetching turnstile token...");
 
   return fetch("https://enc-dec.app/api/enc-vidstack", {
     method: "GET",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+      "User-Agent": userAgent,
       Accept: "application/json",
       "Accept-Language": "en-US,en;q=0.9",
     },
@@ -770,10 +769,11 @@ function getStreams(
 
       const { title, year, imdbId } = mediaInfo;
       const type = mediaType; // Keep the original mediaType
+      const currentUserAgent = WORKING_HEADERS["User-Agent"];
 
       return getXprimeDomain()
         .then(function (api) {
-          return getTurnstileToken().then(function (turnstileToken) {
+          return getTurnstileToken(currentUserAgent).then(function (turnstileToken) {
             return getXprimeServers(api).then(function (servers) {
               if (servers.length === 0) {
                 console.log("[Xprime] No active servers found");
