@@ -3,7 +3,7 @@ const fetch = require("node-fetch");
 // React Native compatible version - Standalone (no external dependencies)
 
 // TMDB API Configuration
-const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
+const TMDB_API_KEY = "68e094699525b18a70bab2f86b1fa706";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 // Working headers for Cloudflare Workers URLs
@@ -1017,11 +1017,23 @@ function getStreams(
                       });
                   } else {
                     // No M3U8 links, just return direct links
-                    const finalLinks = [...directLinks, ...resolvedStreams];
+                    let finalLinks = [...directLinks, ...resolvedStreams];
 
-                    console.log(
-                      `[Xprime] Final result: ${finalLinks.length} total streams (${resolvedStreams.length} from M3U8, ${directLinks.length} direct)`,
-                    );
+                    // Fallback: If no links were found but the backend was reached (even with 403),
+                    // provide a Web View link as a last resort.
+                    if (finalLinks.length === 0) {
+                        const webViewUrl = mediaType === 'movie' 
+                            ? `https://xprime.tv/watch/movie/${tmdbId}`
+                            : `https://xprime.tv/watch/tv/${tmdbId}/${season}/${episode}`;
+                        
+                        return [{
+                            name: "XPRIME - Web View",
+                            title: `${title} ${mediaType === 'tv' ? `S${season}E${episode}` : `(${year})`}`,
+                            url: webViewUrl,
+                            quality: "Direct",
+                            behaviorHints: { notWebReady: false }
+                        }];
+                    }
 
                     // Group streams by quality and format for Nuvio
                     const mediaInfoForGrouping = {
@@ -1051,7 +1063,14 @@ function getStreams(
         })
         .catch(function (error) {
           console.error(`[Xprime] Scraping error: ${error.message}`);
-          return [];
+          // Last resort fallback if error occurred during scraping
+          return [{
+              name: "XPRIME - Web View",
+              title: `${title} ${mediaType === 'tv' ? `S${season}E${episode}` : `(${year})`}`,
+              url: mediaType === 'movie' ? `https://xprime.tv/watch/movie/${tmdbId}` : `https://xprime.tv/watch/tv/${tmdbId}/${season}/${episode}`,
+              quality: "Direct",
+              behaviorHints: { notWebReady: false }
+          }];
         });
     })
     .catch(function (error) {
