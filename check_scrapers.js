@@ -23,7 +23,7 @@ const files = [
   // "./src/scrapers/vidrock",
   // "./src/scrapers/vidsrc",
   "./src/scrapers/vixsrc",
-  "./src/scrapers/watch32",
+  // "./src/scrapers/watch32",
   "./src/scrapers/xprime",
   "./src/scrapers/yflix",
 ];

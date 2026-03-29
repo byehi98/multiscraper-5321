@@ -76,7 +76,7 @@ safeLoad("StreamFlix", () => require("./scrapers/streamflix"));
 // safeLoad("VidRock", () => require("./scrapers/vidrock"));
 // safeLoad("VidSrc", () => require("./scrapers/vidsrc"));
 safeLoad("VixSrc", () => require("./scrapers/vixsrc"));
-safeLoad("Watch32", () => require("./scrapers/watch32"));
+// safeLoad("Watch32", () => require("./scrapers/watch32"));
 safeLoad("XPrime", () => require("./scrapers/xprime"));
 safeLoad("YFlix", () => require("./scrapers/yflix"));
 
