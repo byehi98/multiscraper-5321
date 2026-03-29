@@ -5,13 +5,8 @@ const TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
 const DOMAINS = [
     "https://vegamovies.hot",
-    "https://vegamovies.uz",
-    "https://vegamovies.video",
-    "https://vegamovies.name",
-    "https://vegamoviese.biz",
-    "https://vegamovies.do",
-    "https://vegamovies.yt",
-    "https://vegamovies.is"
+    "https://vegamovies.vodka/",
+    "https://themoviesflix.one/"
 ];
 
 async function getTMDBTitle(tmdbId, mediaType) {
