@@ -53,31 +53,49 @@ var VIDLINK_HEADERS = {
 // src/vidlink/http.js
 let sessionUserAgent = "";
 
+function mergeHeaders(base, extra) {
+  const result = __spreadValues({}, base);
+  if (!extra) return result;
+  Object.entries(extra).forEach(([key, value]) => {
+    const lowerKey = key.toLowerCase();
+    Object.keys(result).forEach(baseKey => {
+      if (baseKey.toLowerCase() === lowerKey) {
+        delete result[baseKey];
+      }
+    });
+    result[key] = value;
+  });
+  return result;
+}
+
 function makeRequest(_0) {
   return __async(this, arguments, function* (url, options = {}) {
     try {
       const { gotScraping } = yield import("got-scraping");
+      
+      // Ensure URL is properly encoded (crucial for JSON in query params)
+      let finalUrl = url;
+      try {
+        finalUrl = new URL(url).href;
+      } catch (e) {}
+
       const gotOptions = {
-        url,
+        url: finalUrl,
         method: options.method || "GET",
-        headers: options.headers || {},
+        headers: mergeHeaders(options.headers || {}, sessionUserAgent ? { "User-Agent": sessionUserAgent } : {}),
         headerGeneratorOptions: {
           browsers: [{ name: "chrome", minVersion: 130 }],
           devices: ["desktop"],
           locales: ["en-US"]
         },
         retry: { limit: 2 },
-        timeout: { request: 10000 },
+        timeout: { request: 15000 },
         throwHttpErrors: false
       };
-      
-      if (sessionUserAgent) {
-        gotOptions.headers["User-Agent"] = sessionUserAgent;
-      }
 
       const response = yield gotScraping(gotOptions);
       
-      if (!sessionUserAgent && response.request.options.headers["user-agent"]) {
+      if (response.request.options.headers["user-agent"]) {
         sessionUserAgent = response.request.options.headers["user-agent"];
       }
 
@@ -202,18 +220,15 @@ function extractHeadersFromUrl(url) {
     const urlObj = new URL(url);
     const headersParam = urlObj.searchParams.get('headers');
     if (headersParam) {
-      const decodedHeaders = JSON.parse(decodeURIComponent(headersParam));
-      // Normalize keys to title case for Stremio/Players if needed, 
-      // but usually lower case works too. Proxy expects 'origin' and 'referer'.
-      const normalizedHeaders = {};
-      Object.entries(decodedHeaders).forEach(([key, value]) => {
-        const normalizedKey = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
-        normalizedHeaders[normalizedKey] = value;
-      });
-      return normalizedHeaders;
+      return JSON.parse(headersParam);
     }
   } catch (e) {
-    console.error(`[Vidlink] Failed to extract headers from URL: ${e.message}`);
+    // try to handle cases where it might be double encoded or something
+    try {
+        const urlObj = new URL(url);
+        const headersParam = urlObj.searchParams.get('headers');
+        if (headersParam) return JSON.parse(decodeURIComponent(headersParam));
+    } catch (e2) {}
   }
   return null;
 }
@@ -222,8 +237,8 @@ function fetchAndParseM3U8(playlistUrl, mediaInfo) {
   return __async(this, null, function* () {
     console.log(`[Vidlink] Fetching M3U8 playlist: ${playlistUrl.substring(0, 80)}...`);
     try {
-      const urlHeaders = extractHeadersFromUrl(playlistUrl) || {};
-      const requestHeaders = __spreadValues(__spreadValues({}, VIDLINK_HEADERS), urlHeaders);
+      const urlHeaders = extractHeadersFromUrl(playlistUrl);
+      const requestHeaders = mergeHeaders(VIDLINK_HEADERS, urlHeaders);
       
       const response = yield makeRequest(playlistUrl, { headers: requestHeaders });
       const m3u8Content = yield response.text();
@@ -244,7 +259,7 @@ function fetchAndParseM3U8(playlistUrl, mediaInfo) {
       console.log(`[Vidlink] Found ${parsedStreams.length} quality variants`);
       return parsedStreams.map((stream) => {
         const quality = getQualityFromResolution(stream.resolution);
-        const streamHeaders = extractHeadersFromUrl(stream.url) || requestHeaders;
+        const streamHeaders = mergeHeaders(requestHeaders, extractHeadersFromUrl(stream.url));
         return {
           name: `Vidlink - ${quality}`,
           title: mediaInfo.title,
@@ -329,7 +344,7 @@ function processVidlinkResponse(data, mediaInfo) {
       Object.entries(data.stream.qualities).forEach(([qualityKey, qualityData]) => {
         if (qualityData.url) {
           const quality = extractQuality({ quality: qualityKey });
-          const streamHeaders = extractHeadersFromUrl(qualityData.url) || VIDLINK_HEADERS;
+          const streamHeaders = mergeHeaders(VIDLINK_HEADERS, extractHeadersFromUrl(qualityData.url));
           streams.push({
             name: `Vidlink - ${quality}`,
             title: streamTitle,
@@ -357,7 +372,7 @@ function processVidlinkResponse(data, mediaInfo) {
       });
     } else if (data.url) {
       const quality = extractQuality(data);
-      const streamHeaders = extractHeadersFromUrl(data.url) || VIDLINK_HEADERS;
+      const streamHeaders = mergeHeaders(VIDLINK_HEADERS, extractHeadersFromUrl(data.url));
       streams.push({
         name: `Vidlink - ${quality}`,
         title: streamTitle,
@@ -371,7 +386,7 @@ function processVidlinkResponse(data, mediaInfo) {
       data.streams.forEach((stream, index) => {
         if (stream.url) {
           const quality = extractQuality(stream);
-          const streamHeaders = extractHeadersFromUrl(stream.url) || VIDLINK_HEADERS;
+          const streamHeaders = mergeHeaders(VIDLINK_HEADERS, extractHeadersFromUrl(stream.url));
           streams.push({
             name: `Vidlink Stream ${index + 1} - ${quality}`,
             title: streamTitle,
@@ -387,7 +402,7 @@ function processVidlinkResponse(data, mediaInfo) {
       data.links.forEach((link, index) => {
         if (link.url) {
           const quality = extractQuality(link);
-          const streamHeaders = extractHeadersFromUrl(link.url) || VIDLINK_HEADERS;
+          const streamHeaders = mergeHeaders(VIDLINK_HEADERS, extractHeadersFromUrl(link.url));
           streams.push({
             name: `Vidlink Link ${index + 1} - ${quality}`,
             title: streamTitle,
@@ -407,7 +422,7 @@ function processVidlinkResponse(data, mediaInfo) {
               continue;
             }
             const quality = extractQuality({ [key]: value });
-            const streamHeaders = extractHeadersFromUrl(value) || VIDLINK_HEADERS;
+            const streamHeaders = mergeHeaders(VIDLINK_HEADERS, extractHeadersFromUrl(value));
             streams.push({
               name: `Vidlink ${key} - ${quality}`,
               title: streamTitle,
