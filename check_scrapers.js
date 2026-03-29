@@ -24,7 +24,7 @@ const files = [
   // "./src/scrapers/vidsrc",
   "./src/scrapers/vixsrc",
   // "./src/scrapers/watch32",
-  "./src/scrapers/xprime",
+  // "./src/scrapers/xprime",
   "./src/scrapers/yflix",
 ];
 

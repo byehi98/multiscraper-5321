@@ -77,7 +77,7 @@ safeLoad("StreamFlix", () => require("./scrapers/streamflix"));
 // safeLoad("VidSrc", () => require("./scrapers/vidsrc"));
 safeLoad("VixSrc", () => require("./scrapers/vixsrc"));
 // safeLoad("Watch32", () => require("./scrapers/watch32"));
-safeLoad("XPrime", () => require("./scrapers/xprime"));
+// safeLoad("XPrime", () => require("./scrapers/xprime"));
 safeLoad("YFlix", () => require("./scrapers/yflix"));
 
 // List of available scrapers (derived from loaded ones)
