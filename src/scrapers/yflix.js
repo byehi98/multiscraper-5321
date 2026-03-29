@@ -275,7 +275,7 @@ function runStreamFetch(eid, title, year, mediaType, seasonNum, episodeNum, rid)
               return decrypt(embedResp.result);
             })
             .then(decrypted => {
-              if (decrypted && typeof decrypted === 'object' && decrypted.url && decrypted.url.includes('rapidshare.cc')) {
+              if (decrypted && typeof decrypted === 'object' && decrypted.url && decrypted.url.includes('rapidshare.')) {
                 logRid(rid, `rapid.media → dec-rapid`, { lid });
                 return decryptRapidMedia(decrypted.url)
                   .then(rapidData => formatStreamsData(rapidData))
