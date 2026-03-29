@@ -119,17 +119,27 @@ function needsHeaders(serverName, url) {
     return false;
 }
 
-// Fetch and parse Astra server JSON to extract actual streaming links
-async function parseAstraPlaylist(playlistUrl, serverName, mediaInfo, seasonNum, episodeNum) {
-    console.log(`[Vidrock] Fetching Astra playlist: ${playlistUrl}`);
+// Fetch and parse JSON playlists (Astra, Atlas, etc.) to extract actual streaming links
+async function parseJsonPlaylist(playlistUrl, serverName, mediaInfo, seasonNum, episodeNum) {
+    console.log(`[Vidrock] Fetching JSON playlist from ${serverName}: ${playlistUrl}`);
     try {
         const response = await fetch(playlistUrl, { headers: playbackHeaders });
-        const data = await response.json();
+        const text = await response.text();
+        
+        // Ensure it's JSON
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.log(`[Vidrock] ${serverName} playlist is not JSON, treating as direct link`);
+            return []; // Fall back to direct link if needed, but handled in loop
+        }
+
         const streams = [];
         if (Array.isArray(data)) {
             data.forEach(item => {
                 if (item.url && item.resolution) {
-                    const quality = `${item.resolution}p`;
+                    const quality = `${item.resolution}p`.replace('pp', 'p'); // Fix potential '1080pp'
                     let mediaTitle = mediaInfo.title || 'Unknown';
                     if (mediaInfo.year) mediaTitle += ` (${mediaInfo.year})`;
                     if (seasonNum && episodeNum) mediaTitle = `${mediaInfo.title} S${String(seasonNum).padStart(2, '0')}E${String(episodeNum).padStart(2, '0')}`;
@@ -148,7 +158,7 @@ async function parseAstraPlaylist(playlistUrl, serverName, mediaInfo, seasonNum,
         }
         return streams;
     } catch (error) {
-        console.error(`[Vidrock] Error parsing Astra playlist: ${error.message}`);
+        console.error(`[Vidrock] Error parsing JSON playlist from ${serverName}: ${error.message}`);
         return [];
     }
 }
@@ -156,7 +166,7 @@ async function parseAstraPlaylist(playlistUrl, serverName, mediaInfo, seasonNum,
 // Process Vidrock API response
 async function processVidrockResponse(data, mediaInfo, seasonNum, episodeNum) {
     const streams = [];
-    const astraPromises = [];
+    const playlistPromises = [];
     
     if (!data || typeof data !== 'object') return streams;
     
@@ -166,9 +176,9 @@ async function processVidrockResponse(data, mediaInfo, seasonNum, episodeNum) {
         
         const videoUrl = source.url;
         
-        // Handle Astra JSON playlist
-        if (serverName === 'Astra' && videoUrl.includes('cdn.vidrock.store/playlist/')) {
-            astraPromises.push(parseAstraPlaylist(videoUrl, serverName, mediaInfo, seasonNum, episodeNum));
+        // Handle JSON playlists (contain /playlist/ and NOT .m3u8)
+        if (videoUrl.includes('/playlist/') && !videoUrl.toLowerCase().endsWith('.m3u8')) {
+            playlistPromises.push(parseJsonPlaylist(videoUrl, serverName, mediaInfo, seasonNum, episodeNum));
             continue;
         }
         
@@ -196,9 +206,9 @@ async function processVidrockResponse(data, mediaInfo, seasonNum, episodeNum) {
         });
     }
     
-    if (astraPromises.length > 0) {
-        const astraResults = await Promise.all(astraPromises);
-        astraResults.forEach(res => streams.push(...res));
+    if (playlistPromises.length > 0) {
+        const playlistResults = await Promise.all(playlistPromises);
+        playlistResults.forEach(res => streams.push(...res));
     }
     
     return streams;
