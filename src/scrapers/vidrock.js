@@ -214,8 +214,11 @@ async function fetchFromVidrock(mediaType, tmdbId, mediaInfo, seasonNum, episode
     
     try {
         const encryptedId = await encryptAesCbc(itemId, PASSPHRASE);
-        const encodedId = encodeURIComponent(encryptedId);
-        const apiUrl = `${VIDROCK_BASE_URL}/api/${mediaType}/${encodedId}`;
+        
+        // Convert to URL-safe base64 to avoid 404/403 errors with slashes/plus signs
+        const urlSafeId = encryptedId.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        
+        const apiUrl = `${VIDROCK_BASE_URL}/api/${mediaType}/${urlSafeId}`;
         
         console.log(`[Vidrock] API URL: ${apiUrl}`);
         
