@@ -421,7 +421,7 @@ function makeRequest(url, options = {}) {
 function getTurnstileToken() {
   console.log("[Xprime] Fetching turnstile token...");
 
-  return fetch("https://enc-dec.app/api/enc-xprime", {
+  return fetch("https://enc-dec.app/api/enc-vidstack", {
     method: "GET",
     headers: {
       "User-Agent":
@@ -439,9 +439,9 @@ function getTurnstileToken() {
       return response.json();
     })
     .then(function (data) {
-      if (data && data.result) {
+      if (data && data.status === 200 && data.result && data.result.token) {
         console.log("[Xprime] Successfully obtained turnstile token");
-        return data.result;
+        return data.result.token;
       } else {
         throw new Error("Invalid turnstile token response format");
       }
