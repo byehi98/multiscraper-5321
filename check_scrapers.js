@@ -1,6 +1,7 @@
 const files = [
   "./src/scrapers/4khdhub",
   "./src/scrapers/animekai",
+  "./src/scrapers/anitaro",
   "./src/scrapers/castle",
   // "./src/scrapers/cinevibe",
   // "./src/scrapers/dahmermovies",
