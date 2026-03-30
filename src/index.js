@@ -54,7 +54,7 @@ function safeLoad(name, loader) {
 // Static requires to ensure bundler detection
 safeLoad("4KHDHub", () => require("./scrapers/4khdhub"));
 safeLoad("AnimeKai", () => require("./scrapers/animekai"));
-safeLoad("Anitaro", () => require("./scrapers/anitaro"));
+// safeLoad("Anitaro", () => require("./scrapers/anitaro"));
 safeLoad("Castle", () => require("./scrapers/castle"));
 // safeLoad("CineVibe", () => require("./scrapers/cinevibe"));
 // safeLoad("DahmerMovies", () => require("./scrapers/dahmermovies"));
