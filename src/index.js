@@ -54,6 +54,7 @@ function safeLoad(name, loader) {
 // Static requires to ensure bundler detection
 safeLoad("4KHDHub", () => require("./scrapers/4khdhub"));
 safeLoad("AnimeKai", () => require("./scrapers/animekai"));
+safeLoad("Anitaro", () => require("./scrapers/anitaro"));
 safeLoad("Castle", () => require("./scrapers/castle"));
 // safeLoad("CineVibe", () => require("./scrapers/cinevibe"));
 // safeLoad("DahmerMovies", () => require("./scrapers/dahmermovies"));
@@ -76,6 +77,7 @@ safeLoad("StreamFlix", () => require("./scrapers/streamflix"));
 // safeLoad("VidRock", () => require("./scrapers/vidrock"));
 // safeLoad("VidSrc", () => require("./scrapers/vidsrc"));
 safeLoad("VixSrc", () => require("./scrapers/vixsrc"));
+safeLoad("WebStreamr", () => require("./scrapers/webstreamr"));
 // safeLoad("Watch32", () => require("./scrapers/watch32"));
 // safeLoad("XPrime", () => require("./scrapers/xprime"));
 safeLoad("YFlix", () => require("./scrapers/yflix"));
