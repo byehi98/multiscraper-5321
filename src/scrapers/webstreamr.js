@@ -93,6 +93,23 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         log(`Step 1: Found ${data.streams.length} stream(s) from WebStreamr`, rid);
 
         const results = data.streams.map(s => {
+            // WebStreamr titles usually look like: "Filename\n💾 Size 🔗 Provider from Source"
+            const titleParts = s.title.split('\n');
+            const fileName = titleParts[0] || 'Unknown File';
+            const metadataLine = titleParts[1] || '';
+            
+            // Extract Size
+            const sizeMatch = metadataLine.match(/💾\s*([\d.]+\s*[GM]B)/i);
+            const size = sizeMatch ? sizeMatch[1] : '';
+
+            // Extract Provider (the part after 🔗)
+            let provider = 'Unknown';
+            if (metadataLine.includes('🔗')) {
+                provider = metadataLine.split('🔗')[1].trim();
+            } else if (s.title.includes('VixSrc')) {
+                provider = 'VixSrc';
+            }
+
             // Normalize quality label
             let quality = 'Unknown';
             if (s.title.includes('2160p') || s.title.includes('4K')) quality = '4K';
@@ -100,18 +117,29 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
             else if (s.title.includes('720p')) quality = '720p';
             else if (s.title.includes('480p')) quality = '480p';
 
-            // Extract real provider name if possible
-            const titleParts = s.title.split('\n');
-            const providerPart = titleParts.find(p => p.includes('🔗')) || '';
-            const providerName = providerPart.replace('🔗', '').trim() || 'Unknown';
+            // Extract flags from the original name if present
+            const flags = s.name.match(/[🌐🇺🇸🇮🇳🇬🇧🇫🇷🇩🇪🇮🇹🇪🇸]+/g)?.join(' ') || '';
+
+            // Format Name: [WS] Provider - Quality
+            // Keep it short so it fits on one line in most UI views
+            const cleanProvider = provider.split(' from ')[0].trim().replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+            const displayName = `WS | ${cleanProvider} ${flags} - ${quality}`.trim();
+
+            // Format Title (Description):
+            // Quality | Size | Provider
+            // Filename
+            const displayTitle = [
+                `${quality}${size ? ` | ${size}` : ''} | ${provider}`,
+                fileName
+            ].join('\n');
 
             return {
-                name: `WEBSTREAMR ${providerName.toUpperCase()} - ${quality}`,
-                title: s.title,
+                name: displayName,
+                title: displayTitle,
                 url: s.url,
                 quality: quality,
                 behaviorHints: {
-                    bingeGroup: `webstreamr-${providerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                    bingeGroup: `webstreamr-${cleanProvider.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
                     notWebReady: s.behaviorHints?.notWebReady || false,
                     proxyHeaders: s.behaviorHints?.proxyHeaders || null
                 }
