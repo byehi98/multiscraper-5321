@@ -9,6 +9,7 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://a.111477.xyz';
 const PROXY_URL = 'https://p.111477.xyz/bulk?u=';
+const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/proxy?url=';
 
 // Debug helpers
 function log(msg, rid, extra) {
@@ -28,7 +29,7 @@ async function request(url, options = {}) {
         url: url,
         method: options.method || 'GET',
         headers: options.headers || {},
-        timeout: { request: 30000 }, // High index pages need more time
+        timeout: { request: 30000 },
         retry: { limit: 2 },
         headerGeneratorOptions: {
             browsers: [{ name: 'chrome', minVersion: 120 }],
@@ -41,15 +42,49 @@ async function request(url, options = {}) {
         requestOptions.responseType = options.responseType;
     }
 
-    const response = await gotScraping(requestOptions);
-    return response;
+    try {
+        let response = await gotScraping(requestOptions);
+        
+        // If we get a very small body (blocked) or non-200, try the fallback proxy
+        if ((!response.body || response.body.length < 1000) && !url.includes('api.themoviedb.org')) {
+            log(`Direct request returned small body (${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
+            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
+            const proxyResponse = await gotScraping({
+                ...requestOptions,
+                url: proxyUrl,
+                timeout: { request: 20000 }
+            });
+            if (proxyResponse.body && proxyResponse.body.length > (response.body?.length || 0)) {
+                log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
+                return proxyResponse;
+            }
+        }
+        return response;
+    } catch (err) {
+        if (!url.includes('api.themoviedb.org')) {
+            log(`Direct request failed (${err.message}), trying fallback proxy...`, options.rid);
+            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
+            try {
+                const proxyResponse = await gotScraping({
+                    ...requestOptions,
+                    url: proxyUrl,
+                    timeout: { request: 20000 }
+                });
+                return proxyResponse;
+            } catch (proxyErr) {
+                log(`Fallback proxy also failed: ${proxyErr.message}`, options.rid);
+                throw err; // Throw original error
+            }
+        }
+        throw err;
+    }
 }
 
 async function getTMDBInfo(tmdbId, mediaType, rid) {
     for (let i = 0; i < 3; i++) {
         try {
             const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`;
-            const res = await request(url, { responseType: 'json' });
+            const res = await request(url, { responseType: 'json', rid });
             const data = res.body;
             return {
                 title: data.name || data.title,
@@ -99,7 +134,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         for (const cat of categories) {
             log(`Searching in category: ${cat}`, rid);
             try {
-                const res = await request(`${BASE_URL}${cat}`);
+                const res = await request(`${BASE_URL}${cat}`, { rid });
+                log(`Response from ${cat}: ${res.statusCode} | Length: ${res.body?.length || 0}`, rid);
+                
                 const $ = cheerio.load(res.body);
                 
                 const matches = [];
@@ -111,7 +148,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     const cleanName = cleanTitle(name);
                     
                     // Simple matching logic
-                    if (cleanName.includes(targetTitle)) {
+                    if (cleanName.includes(targetTitle) || targetTitle.includes(cleanName)) {
                         // For movies, check year if possible
                         if (type === 'movie') {
                             if (name.includes(targetYear) || !targetYear) {
@@ -134,7 +171,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     // For TV Shows, try to find a season folder first
                     if (type === 'tv') {
                         try {
-                            const showRes = await request(`${BASE_URL}${match.url}`);
+                            const showRes = await request(`${BASE_URL}${match.url}`, { rid });
                             const $s = cheerio.load(showRes.body);
                             let seasonMatch = null;
                             $s('tr[data-entry="true"]').each((_, el) => {
@@ -154,7 +191,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                         }
                     }
 
-                    const folderRes = await request(`${BASE_URL}${targetFolderUrl}`);
+                    const folderRes = await request(`${BASE_URL}${targetFolderUrl}`, { rid });
                     const $f = cheerio.load(folderRes.body);
                     
                     const files = [];
