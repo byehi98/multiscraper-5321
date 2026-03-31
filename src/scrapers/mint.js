@@ -3,7 +3,6 @@ const cheerio = require('cheerio');
 /**
  * Mint Scraper for MultiScraper
  * Source: https://a.111477.xyz/
- * nature: Large file index with proxy bypass
  */
 
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
@@ -24,29 +23,21 @@ function log(msg, rid, extra) {
 async function request(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
-    // Gold Standard Headers
+    // Add small delay to avoid rate limits
+    await new Promise(r => setTimeout(r, 500));
+
     const browserHeaders = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'max-age=0',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
+        'Referer': options.referer || BASE_URL + '/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     };
 
     const requestOptions = {
         url: url,
         method: options.method || 'GET',
-        headers: {
-            ...browserHeaders,
-            ...options.headers
-        },
+        headers: browserHeaders,
         timeout: { request: 30000 },
         retry: { limit: 2 },
         headerGeneratorOptions: {
@@ -63,9 +54,10 @@ async function request(url, options = {}) {
     try {
         let response = await gotScraping(requestOptions);
         
-        // Check if we are still getting a block page even with 200/403
-        if (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.includes('challenge-running'))) {
-            throw new Error('Cloudflare challenge detected');
+        // Block detection
+        if (response.statusCode === 403 || response.statusCode === 429 || 
+            (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.length < 10000))) {
+            throw new Error(`Access blocked (Status: ${response.statusCode})`);
         }
 
         return response;
@@ -108,7 +100,6 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     log(`Starting getStreams for TMDB:${tmdbId} ${type} S${seasonNum}E${episodeNum}`, rid);
 
     try {
-        // Step 1: Get Metadata
         const meta = await getTMDBInfo(tmdbId, type === 'tv' ? 'tv' : 'movie', rid);
         if (!meta) throw new Error("Could not get TMDB metadata");
         log(`Step 1: Found title "${meta.title}" (${meta.year})`, rid);
@@ -116,22 +107,14 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         const targetTitle = cleanTitle(meta.title);
         const targetYear = meta.year;
 
-        // Step 2: Determine search categories
-        let categories = [];
-        if (type === 'movie') {
-            categories = ['/movies/'];
-        } else {
-            categories = ['/tvs/', '/asiandrama/', '/kdrama/'];
-        }
-
+        let categories = type === 'movie' ? ['/movies/'] : ['/tvs/', '/asiandrama/', '/kdrama/'];
         const streams = [];
 
         for (const cat of categories) {
+            const catUrl = `${BASE_URL}${cat}`;
             log(`Searching in category: ${cat}`, rid);
             try {
-                const res = await request(`${BASE_URL}${cat}`, { rid });
-                log(`Response from ${cat}: ${res.statusCode} | Length: ${res.body?.length || 0}`, rid);
-                
+                const res = await request(catUrl, { rid });
                 const $ = cheerio.load(res.body);
                 
                 const matches = [];
@@ -141,8 +124,6 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     if (!name || !url) return;
 
                     const cleanName = cleanTitle(name);
-                    
-                    // Improved matching logic using word boundaries
                     let isMatch = false;
                     if (cleanName === targetTitle) {
                         isMatch = true;
@@ -163,17 +144,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     }
                 });
 
-                // Sort matches by score
                 matches.sort((a, b) => b.score - a.score);
 
-                // Step 3: Deep dive into folders
                 for (const match of matches.slice(0, 3)) {
                     log(`Deep diving into: ${match.name}`, rid);
                     let targetFolderUrl = match.url;
+                    const matchFullUrl = `${BASE_URL}${match.url}`;
 
                     if (type === 'tv') {
                         try {
-                            const showRes = await request(`${BASE_URL}${match.url}`, { rid });
+                            const showRes = await request(matchFullUrl, { rid, referer: catUrl });
                             const $s = cheerio.load(showRes.body);
                             let seasonMatch = null;
                             $s('tr[data-entry="true"]').each((_, el) => {
@@ -184,26 +164,20 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                                     return false;
                                 }
                             });
-                            if (seasonMatch) {
-                                log(`Found season folder: ${seasonMatch}`, rid);
-                                targetFolderUrl = seasonMatch;
-                            }
+                            if (seasonMatch) targetFolderUrl = seasonMatch;
                         } catch (e) {
                             log(`Error finding season folder: ${e.message}`, rid);
                         }
                     }
 
-                    const folderRes = await request(`${BASE_URL}${targetFolderUrl}`, { rid });
+                    const folderFullUrl = `${BASE_URL}${targetFolderUrl}`;
+                    const folderRes = await request(folderFullUrl, { rid, referer: matchFullUrl });
                     const $f = cheerio.load(folderRes.body);
                     
                     const files = [];
                     $f('tr[data-entry="true"]').each((_, el) => {
                         const fileName = $(el).attr('data-name');
                         const fileUrl = $(el).attr('data-url');
-                        const typeLabel = $(el).find('.type-label').text().trim();
-                        
-                        if (typeLabel === 'Directory') return;
-
                         if (fileName.match(/\.(mkv|mp4|m4v|avi|flv|webm|m3u8)$/i)) {
                             files.push({ name: fileName, url: fileUrl });
                         }
@@ -212,16 +186,13 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     if (type === 'tv') {
                         const epPattern = new RegExp(`[ex]0*${episodeNum}(?![0-9])|\\s0*${episodeNum}(?![0-9])|\\-${episodeNum}(?![0-9])`, 'i');
                         const filteredFiles = files.filter(f => f.name.match(epPattern));
-                        
                         for (const f of filteredFiles) {
                             streams.push({
                                 name: `MINT | ${match.name.slice(0, 15)}... | S${seasonNum}E${episodeNum}`,
                                 title: f.name,
                                 url: `${PROXY_URL}${encodeURIComponent(BASE_URL + f.url)}`,
                                 quality: f.name.includes('2160p') ? '4K' : (f.name.includes('1080p') ? '1080p' : '720p'),
-                                behaviorHints: {
-                                    bingeGroup: `mint-${match.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                }
+                                behaviorHints: { bingeGroup: `mint-${match.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` }
                             });
                         }
                     } else {
@@ -231,24 +202,18 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                                 title: f.name,
                                 url: `${PROXY_URL}${encodeURIComponent(BASE_URL + f.url)}`,
                                 quality: f.name.includes('2160p') ? '4K' : (f.name.includes('1080p') ? '1080p' : '720p'),
-                                behaviorHints: {
-                                    bingeGroup: `mint-${match.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                }
+                                behaviorHints: { bingeGroup: `mint-${match.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` }
                             });
                         }
                     }
                 }
-
                 if (streams.length > 0) break;
-
             } catch (err) {
                 log(`Error searching in ${cat}: ${err.message}`, rid);
             }
         }
-
         log(`🎉 COMPLETE: Returning ${streams.length} stream(s)`, rid);
         return streams;
-
     } catch (e) {
         log(`❌ ERROR: ${e.message}`, rid);
         return [];
