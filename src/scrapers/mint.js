@@ -20,28 +20,28 @@ function log(msg, rid, extra) {
     }
 }
 
-// Stealth request helper
+// Minimal request helper to avoid Cloudflare detection
 async function request(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
-    // Add small delay to avoid rate limits
-    await new Promise(r => setTimeout(r, 1000));
+    // Using minimal headers as local curl tests show they work better
+    const minimalHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Referer': options.referer || BASE_URL + '/'
+    };
 
     const requestOptions = {
         url: url,
         method: options.method || 'GET',
-        headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': options.referer || BASE_URL + '/',
-            ...options.headers
-        },
+        headers: minimalHeaders,
         timeout: { request: 30000 },
         retry: { limit: 1 },
+        // Disabling advanced emulation features that might trigger CF
         headerGeneratorOptions: {
             browsers: [{ name: 'chrome', minVersion: 120 }],
-            devices: ['desktop'],
-            locales: ['en-US']
+            devices: ['desktop']
         }
     };
 
@@ -53,45 +53,24 @@ async function request(url, options = {}) {
         let response = await gotScraping(requestOptions);
         
         // Block detection
-        const isBlock = response.statusCode === 403 || 
-                        (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.length < 10000));
-
-        if (isBlock && !url.includes('api.themoviedb.org')) {
-            log(`Direct request suspicious (${response.statusCode}, ${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
-            
-            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
-            const proxyResponse = await gotScraping({
-                ...requestOptions,
-                url: proxyUrl,
-                // Do NOT send the same headers to the proxy as it might interfere
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                },
-                timeout: { request: 20000 }
-            });
-
-            if (proxyResponse.body && proxyResponse.body.length > 5000 && !proxyResponse.body.includes('Just a moment...')) {
-                log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
-                return proxyResponse;
-            }
-            throw new Error('Cloudflare challenge detected on both direct and proxy');
+        if (response.statusCode === 403 || (typeof response.body === 'string' && response.body.includes('Just a moment...'))) {
+            throw new Error(`Cloudflare block detected (Status: ${response.statusCode})`);
         }
 
         return response;
     } catch (err) {
         if (!url.includes('api.themoviedb.org')) {
-            log(`Request failed (${err.message}), trying fallback proxy...`, options.rid);
+            log(`Direct request failed or blocked (${err.message}), trying fallback proxy...`, options.rid);
             try {
                 const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
                 const proxyResponse = await gotScraping({
-                    ...requestOptions,
                     url: proxyUrl,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    },
                     timeout: { request: 20000 }
                 });
-                return proxyResponse;
+                if (proxyResponse.body && proxyResponse.body.length > 5000 && !proxyResponse.body.includes('Just a moment...')) {
+                    log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
+                    return proxyResponse;
+                }
             } catch (proxyErr) {
                 log(`Fallback proxy also failed: ${proxyErr.message}`, options.rid);
             }
