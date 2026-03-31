@@ -1,4 +1,5 @@
 const cheerio = require('cheerio');
+const fetch = require('node-fetch');
 
 /**
  * Mint Scraper for MultiScraper
@@ -8,7 +9,6 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://a.111477.xyz';
 const PROXY_URL = 'https://p.111477.xyz/bulk?u=';
-const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/?destination=';
 
 // Debug helpers
 function log(msg, rid, extra) {
@@ -20,61 +20,36 @@ function log(msg, rid, extra) {
     }
 }
 
-// Minimal request helper to avoid Cloudflare detection
+// Request helper using node-fetch for better Cloudflare compatibility
 async function request(url, options = {}) {
-    const { gotScraping } = await import('got-scraping');
-    
-    // Using minimal headers as local curl tests show they work better
-    const minimalHeaders = {
+    // TMDB still uses the standard got-scraping if possible, but here we keep it consistent
+    const browserHeaders = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         'Referer': options.referer || BASE_URL + '/'
     };
 
-    const requestOptions = {
-        url: url,
-        method: options.method || 'GET',
-        headers: minimalHeaders,
-        timeout: { request: 30000 },
-        retry: { limit: 1 },
-        // Disabling advanced emulation features that might trigger CF
-        headerGeneratorOptions: {
-            browsers: [{ name: 'chrome', minVersion: 120 }],
-            devices: ['desktop']
-        }
-    };
-
-    if (options.responseType) {
-        requestOptions.responseType = options.responseType;
-    }
-
     try {
-        let response = await gotScraping(requestOptions);
+        const res = await fetch(url, {
+            method: options.method || 'GET',
+            headers: {
+                ...browserHeaders,
+                ...options.headers
+            },
+            timeout: 30000
+        });
+
+        const body = options.responseType === 'json' ? await res.json() : await res.text();
         
         // Block detection
-        if (response.statusCode === 403 || (typeof response.body === 'string' && response.body.includes('Just a moment...'))) {
-            throw new Error(`Cloudflare block detected (Status: ${response.statusCode})`);
+        if (res.status === 403 || (typeof body === 'string' && body.includes('Just a moment...'))) {
+            throw new Error(`Cloudflare block detected (Status: ${res.status})`);
         }
 
-        return response;
+        return { body, statusCode: res.status };
     } catch (err) {
-        if (!url.includes('api.themoviedb.org')) {
-            log(`Direct request failed or blocked (${err.message}), trying fallback proxy...`, options.rid);
-            try {
-                const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
-                const proxyResponse = await gotScraping({
-                    url: proxyUrl,
-                    timeout: { request: 20000 }
-                });
-                if (proxyResponse.body && proxyResponse.body.length > 5000 && !proxyResponse.body.includes('Just a moment...')) {
-                    log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
-                    return proxyResponse;
-                }
-            } catch (proxyErr) {
-                log(`Fallback proxy also failed: ${proxyErr.message}`, options.rid);
-            }
-        }
+        log(`Request to ${url} failed: ${err.message}`, options.rid);
         throw err;
     }
 }
