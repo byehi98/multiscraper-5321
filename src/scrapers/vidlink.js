@@ -152,20 +152,48 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
         }
 
         const results = allSources.map(s => {
+            let finalUrl = s.url;
+            let finalHeaders = {
+                'Referer': BASE_URL,
+                'User-Agent': response.request.options.headers['user-agent']
+            };
+
+            // Proxy Bypass Logic for vodvidl.site
+            // Example: https://storm.vodvidl.site/proxy/PATH.m3u8?headers={"referer":"...","origin":"..."}&host=HOST
+            if (finalUrl.includes('vodvidl.site/proxy/')) {
+                try {
+                    const urlObj = new URL(finalUrl);
+                    const host = urlObj.searchParams.get('host');
+                    const encodedHeaders = urlObj.searchParams.get('headers');
+                    const pathWithM3u8 = urlObj.pathname.replace('/proxy/', '');
+                    
+                    if (host) {
+                        // Reconstruct direct URL
+                        finalUrl = `${host.endsWith('/') ? host.slice(0, -1) : host}/${pathWithM3u8}`;
+                        
+                        // Use headers from the URL if available
+                        if (encodedHeaders) {
+                            const parsedHeaders = JSON.parse(encodedHeaders);
+                            if (parsedHeaders.referer) finalHeaders.Referer = parsedHeaders.referer;
+                            if (parsedHeaders.origin) finalHeaders.Origin = parsedHeaders.origin;
+                        }
+                    }
+                } catch (err) {
+                    log(`Error bypassing proxy for ${s.url}: ${err.message}`, rid);
+                }
+            }
+
             return {
                 name: `VIDLINK ${s.name.toUpperCase()} - ${s.quality}`,
                 title: `VidLink ${s.name} stream`,
-                url: s.url,
+                url: finalUrl,
                 quality: s.quality,
                 subtitles: allSubtitles,
                 behaviorHints: {
                     bingeGroup: `vidlink-${s.name.toLowerCase()}`,
                     notWebReady: true,
                     proxyHeaders: {
-                        request: {
-                            'Referer': BASE_URL,
-                            'User-Agent': response.request.options.headers['user-agent']
-                        }
+                        request: finalHeaders
                     }
                 }
             };
