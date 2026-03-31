@@ -94,7 +94,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
             }
         });
 
-        const data = response.body;
+        let data = response.body;
+        if (typeof data === 'string') {
+            try {
+                data = JSON.parse(data);
+            } catch (e) {
+                log(`JSON Parse error: ${e.message}`, rid);
+                return [];
+            }
+        }
+
         log(`Step 3: Parsing VidLink API response`, rid);
 
         const allSources = [];
