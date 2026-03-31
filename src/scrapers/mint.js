@@ -9,7 +9,7 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://a.111477.xyz';
 const PROXY_URL = 'https://p.111477.xyz/bulk?u=';
-const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/proxy?url=';
+const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/?destination=';
 
 // Debug helpers
 function log(msg, rid, extra) {
@@ -45,9 +45,11 @@ async function request(url, options = {}) {
     try {
         let response = await gotScraping(requestOptions);
         
-        // If we get a very small body (blocked) or non-200, try the fallback proxy
-        if ((!response.body || response.body.length < 1000) && !url.includes('api.themoviedb.org')) {
-            log(`Direct request returned small body (${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
+        // Trigger fallback if blocked (403), small body, or non-200 (except for TMDB)
+        const isSuspicious = response.statusCode === 403 || (response.body && response.body.length < 10000);
+        
+        if (isSuspicious && !url.includes('api.themoviedb.org')) {
+            log(`Direct request suspicious (${response.statusCode}, ${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
             const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
             const proxyResponse = await gotScraping({
                 ...requestOptions,
@@ -147,8 +149,19 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
                     const cleanName = cleanTitle(name);
                     
-                    // Simple matching logic
-                    if (cleanName.includes(targetTitle) || targetTitle.includes(cleanName)) {
+                    // Improved matching logic using word boundaries
+                    let isMatch = false;
+                    if (cleanName === targetTitle) {
+                        isMatch = true;
+                    } else if (targetTitle.length > 5) {
+                        const targetWords = targetTitle.split(' ');
+                        const nameWords = cleanName.split(' ');
+                        
+                        // Check if all words in target title exist in the folder name
+                        isMatch = targetWords.every(word => nameWords.includes(word));
+                    }
+
+                    if (isMatch) {
                         // For movies, check year if possible
                         if (type === 'movie') {
                             if (name.includes(targetYear) || !targetYear) {
