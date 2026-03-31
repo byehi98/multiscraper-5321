@@ -8,6 +8,7 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://a.111477.xyz';
 const PROXY_URL = 'https://p.111477.xyz/bulk?u=';
+const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/?destination=';
 
 // Debug helpers
 function log(msg, rid, extra) {
@@ -24,22 +25,19 @@ async function request(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
     // Add small delay to avoid rate limits
-    await new Promise(r => setTimeout(r, 500));
-
-    const browserHeaders = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'max-age=0',
-        'Referer': options.referer || BASE_URL + '/',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    };
+    await new Promise(r => setTimeout(r, 1000));
 
     const requestOptions = {
         url: url,
         method: options.method || 'GET',
-        headers: browserHeaders,
+        headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': options.referer || BASE_URL + '/',
+            ...options.headers
+        },
         timeout: { request: 30000 },
-        retry: { limit: 2 },
+        retry: { limit: 1 },
         headerGeneratorOptions: {
             browsers: [{ name: 'chrome', minVersion: 120 }],
             devices: ['desktop'],
@@ -55,14 +53,49 @@ async function request(url, options = {}) {
         let response = await gotScraping(requestOptions);
         
         // Block detection
-        if (response.statusCode === 403 || response.statusCode === 429 || 
-            (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.length < 10000))) {
-            throw new Error(`Access blocked (Status: ${response.statusCode})`);
+        const isBlock = response.statusCode === 403 || 
+                        (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.length < 10000));
+
+        if (isBlock && !url.includes('api.themoviedb.org')) {
+            log(`Direct request suspicious (${response.statusCode}, ${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
+            
+            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
+            const proxyResponse = await gotScraping({
+                ...requestOptions,
+                url: proxyUrl,
+                // Do NOT send the same headers to the proxy as it might interfere
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                timeout: { request: 20000 }
+            });
+
+            if (proxyResponse.body && proxyResponse.body.length > 5000 && !proxyResponse.body.includes('Just a moment...')) {
+                log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
+                return proxyResponse;
+            }
+            throw new Error('Cloudflare challenge detected on both direct and proxy');
         }
 
         return response;
     } catch (err) {
-        log(`Request to ${url} failed: ${err.message}`, options.rid);
+        if (!url.includes('api.themoviedb.org')) {
+            log(`Request failed (${err.message}), trying fallback proxy...`, options.rid);
+            try {
+                const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
+                const proxyResponse = await gotScraping({
+                    ...requestOptions,
+                    url: proxyUrl,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    },
+                    timeout: { request: 20000 }
+                });
+                return proxyResponse;
+            } catch (proxyErr) {
+                log(`Fallback proxy also failed: ${proxyErr.message}`, options.rid);
+            }
+        }
         throw err;
     }
 }
@@ -178,6 +211,10 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     $f('tr[data-entry="true"]').each((_, el) => {
                         const fileName = $(el).attr('data-name');
                         const fileUrl = $(el).attr('data-url');
+                        const typeLabel = $(el).find('.type-label').text().trim();
+                        
+                        if (typeLabel === 'Directory') return;
+
                         if (fileName.match(/\.(mkv|mp4|m4v|avi|flv|webm|m3u8)$/i)) {
                             files.push({ name: fileName, url: fileUrl });
                         }
