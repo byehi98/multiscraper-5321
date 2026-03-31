@@ -46,19 +46,23 @@ async function request(url, options = {}) {
 }
 
 async function getTMDBInfo(tmdbId, mediaType, rid) {
-    try {
-        const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`;
-        const res = await request(url, { responseType: 'json' });
-        const data = res.body;
-        return {
-            title: data.name || data.title,
-            year: (data.first_air_date || data.release_date || '').split('-')[0],
-            original_title: data.original_name || data.original_title
-        };
-    } catch (e) {
-        log(`TMDB error: ${e.message}`, rid);
-        return null;
+    for (let i = 0; i < 3; i++) {
+        try {
+            const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`;
+            const res = await request(url, { responseType: 'json' });
+            const data = res.body;
+            return {
+                title: data.name || data.title,
+                year: (data.first_air_date || data.release_date || '').split('-')[0],
+                original_title: data.original_name || data.original_title
+            };
+        } catch (e) {
+            log(`TMDB error (attempt ${i+1}): ${e.message}`, rid);
+            if (i === 2) return null;
+            await new Promise(r => setTimeout(r, 1000));
+        }
     }
+    return null;
 }
 
 function cleanTitle(title) {
