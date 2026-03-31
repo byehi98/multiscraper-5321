@@ -54,7 +54,6 @@ function safeLoad(name, loader) {
 // Static requires to ensure bundler detection
 safeLoad("4KHDHub", () => require("./scrapers/4khdhub"));
 safeLoad("AnimeKai", () => require("./scrapers/animekai"));
-// safeLoad("Anitaro", () => require("./scrapers/anitaro"));
 safeLoad("Castle", () => require("./scrapers/castle"));
 // safeLoad("CineVibe", () => require("./scrapers/cinevibe"));
 // safeLoad("DahmerMovies", () => require("./scrapers/dahmermovies"));
@@ -71,7 +70,7 @@ safeLoad("Castle", () => require("./scrapers/castle"));
 safeLoad("StreamFlix", () => require("./scrapers/streamflix"));
 // safeLoad("UHDMovies", () => require("./scrapers/uhdmovies"));
 // safeLoad("Videasy", () => require("./scrapers/videasy"));
-// safeLoad("VidLink", () => require("./scrapers/vidlink"));
+safeLoad("VidLink", () => require("./scrapers/vidlink"));
 // safeLoad("VidNest", () => require("./scrapers/vidnest"));
 // safeLoad("VidNest-Anime", () => require("./scrapers/vidnest-anime"));
 // safeLoad("VidRock", () => require("./scrapers/vidrock"));

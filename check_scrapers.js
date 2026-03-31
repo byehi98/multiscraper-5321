@@ -18,7 +18,7 @@ const files = [
   "./src/scrapers/streamflix",
   // "./src/scrapers/uhdmovies",
   // "./src/scrapers/videasy",
-  // "./src/scrapers/vidlink",
+  "./src/scrapers/vidlink",
   // "./src/scrapers/vidnest",
   // "./src/scrapers/vidnest-anime",
   // "./src/scrapers/vidrock",
