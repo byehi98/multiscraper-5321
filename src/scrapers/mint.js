@@ -9,7 +9,6 @@ const cheerio = require('cheerio');
 const TMDB_API_KEY = '439c478a771f35c05022f9feabcca01c';
 const BASE_URL = 'https://a.111477.xyz';
 const PROXY_URL = 'https://p.111477.xyz/bulk?u=';
-const FALLBACK_PROXY = 'https://simple-proxy-5321.netlify.app/?destination=';
 
 // Debug helpers
 function log(msg, rid, extra) {
@@ -25,10 +24,29 @@ function log(msg, rid, extra) {
 async function request(url, options = {}) {
     const { gotScraping } = await import('got-scraping');
     
+    // Gold Standard Headers
+    const browserHeaders = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'max-age=0',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    };
+
     const requestOptions = {
         url: url,
         method: options.method || 'GET',
-        headers: options.headers || {},
+        headers: {
+            ...browserHeaders,
+            ...options.headers
+        },
         timeout: { request: 30000 },
         retry: { limit: 2 },
         headerGeneratorOptions: {
@@ -45,39 +63,14 @@ async function request(url, options = {}) {
     try {
         let response = await gotScraping(requestOptions);
         
-        // Trigger fallback if blocked (403), small body, or non-200 (except for TMDB)
-        const isSuspicious = response.statusCode === 403 || (response.body && response.body.length < 10000);
-        
-        if (isSuspicious && !url.includes('api.themoviedb.org')) {
-            log(`Direct request suspicious (${response.statusCode}, ${response.body?.length || 0} bytes), trying fallback proxy...`, options.rid);
-            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
-            const proxyResponse = await gotScraping({
-                ...requestOptions,
-                url: proxyUrl,
-                timeout: { request: 20000 }
-            });
-            if (proxyResponse.body && proxyResponse.body.length > (response.body?.length || 0)) {
-                log(`Fallback proxy success: ${proxyResponse.body.length} bytes`, options.rid);
-                return proxyResponse;
-            }
+        // Check if we are still getting a block page even with 200/403
+        if (typeof response.body === 'string' && (response.body.includes('Just a moment...') || response.body.includes('challenge-running'))) {
+            throw new Error('Cloudflare challenge detected');
         }
+
         return response;
     } catch (err) {
-        if (!url.includes('api.themoviedb.org')) {
-            log(`Direct request failed (${err.message}), trying fallback proxy...`, options.rid);
-            const proxyUrl = `${FALLBACK_PROXY}${encodeURIComponent(url)}`;
-            try {
-                const proxyResponse = await gotScraping({
-                    ...requestOptions,
-                    url: proxyUrl,
-                    timeout: { request: 20000 }
-                });
-                return proxyResponse;
-            } catch (proxyErr) {
-                log(`Fallback proxy also failed: ${proxyErr.message}`, options.rid);
-                throw err; // Throw original error
-            }
-        }
+        log(`Request to ${url} failed: ${err.message}`, options.rid);
         throw err;
     }
 }
@@ -156,13 +149,10 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     } else if (targetTitle.length > 5) {
                         const targetWords = targetTitle.split(' ');
                         const nameWords = cleanName.split(' ');
-                        
-                        // Check if all words in target title exist in the folder name
                         isMatch = targetWords.every(word => nameWords.includes(word));
                     }
 
                     if (isMatch) {
-                        // For movies, check year if possible
                         if (type === 'movie') {
                             if (name.includes(targetYear) || !targetYear) {
                                 matches.push({ name, url, score: cleanName === targetTitle ? 100 : 50 });
@@ -177,11 +167,10 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                 matches.sort((a, b) => b.score - a.score);
 
                 // Step 3: Deep dive into folders
-                for (const match of matches.slice(0, 3)) { // Limit to top 3 matches
+                for (const match of matches.slice(0, 3)) {
                     log(`Deep diving into: ${match.name}`, rid);
                     let targetFolderUrl = match.url;
 
-                    // For TV Shows, try to find a season folder first
                     if (type === 'tv') {
                         try {
                             const showRes = await request(`${BASE_URL}${match.url}`, { rid });
@@ -215,15 +204,12 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                         
                         if (typeLabel === 'Directory') return;
 
-                        // Check if it's a video file
                         if (fileName.match(/\.(mkv|mp4|m4v|avi|flv|webm|m3u8)$/i)) {
                             files.push({ name: fileName, url: fileUrl });
                         }
                     });
 
-                    // For TV Shows, find the correct episode
                     if (type === 'tv') {
-                        // More robust episode matching: E01, Ep01, - 01, etc.
                         const epPattern = new RegExp(`[ex]0*${episodeNum}(?![0-9])|\\s0*${episodeNum}(?![0-9])|\\-${episodeNum}(?![0-9])`, 'i');
                         const filteredFiles = files.filter(f => f.name.match(epPattern));
                         
@@ -239,7 +225,6 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                             });
                         }
                     } else {
-                        // For Movies, take all video files found
                         for (const f of files) {
                             streams.push({
                                 name: `MINT | ${match.name.slice(0, 20)}...`,
@@ -254,7 +239,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                     }
                 }
 
-                if (streams.length > 0) break; // Found something in this category
+                if (streams.length > 0) break;
 
             } catch (err) {
                 log(`Error searching in ${cat}: ${err.message}`, rid);
