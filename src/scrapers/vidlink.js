@@ -158,18 +158,21 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                 'User-Agent': response.request.options.headers['user-agent']
             };
 
-            // Proxy Bypass Logic for vodvidl.site
-            // Example: https://storm.vodvidl.site/proxy/PATH.m3u8?headers={"referer":"...","origin":"..."}&host=HOST
-            if (finalUrl.includes('vodvidl.site/proxy/')) {
+            // Generic Proxy Bypass Logic
+            // Detects any URL with /proxy/ and ?host= parameters
+            if (finalUrl.includes('/proxy/') && finalUrl.includes('host=')) {
                 try {
                     const urlObj = new URL(finalUrl);
                     const host = urlObj.searchParams.get('host');
                     const encodedHeaders = urlObj.searchParams.get('headers');
-                    const pathWithM3u8 = urlObj.pathname.replace('/proxy/', '');
+                    
+                    // Extract path: everything between /proxy/ and the start of query params
+                    const proxyMatch = finalUrl.match(/\/proxy\/(.*?)\?/);
+                    const pathWithM3u8 = proxyMatch ? proxyMatch[1] : urlObj.pathname.replace(/.*\/proxy\//, '');
                     
                     if (host) {
                         // Reconstruct direct URL
-                        finalUrl = `${host.endsWith('/') ? host.slice(0, -1) : host}/${pathWithM3u8}`;
+                        finalUrl = `${host.endsWith('/') ? host.slice(0, -1) : host}/${decodeURIComponent(pathWithM3u8)}`;
                         
                         // Use headers from the URL if available
                         if (encodedHeaders) {
