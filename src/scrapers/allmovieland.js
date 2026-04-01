@@ -168,14 +168,26 @@ async function getStreamsFromDomain(domain, mediaInfo, mediaType, season, episod
         log(`Step 4: Fetching embed: ${embedLink}`, rid);
         const embedRes = await request(embedLink, { headers: { Referer: bestMatch.href } });
         const embed$ = cheerio.load(embedRes.body);
-        const lastScript = embed$("body > script").last().html() || "";
-        const p3Match = lastScript.match(/let\s+p3\s*=\s*(\{.*\});/);
-        if (!p3Match) {
-            log("No p3 JSON found in embed.", rid);
+        
+        let p3Json = null;
+        embed$("script").each((_, el) => {
+            const content = $(el).html() || "";
+            // Try p3 then p2
+            const match = content.match(/let\s+p[23]\s*=\s*(\{.*\});/);
+            if (match) {
+                try {
+                    p3Json = JSON.parse(match[1]);
+                    return false; // Found it, break loop
+                } catch (e) {}
+            }
+        });
+
+        if (!p3Json) {
+            log("No p3 JSON found in embed script.", rid);
             return [];
         }
 
-        const json = JSON.parse(p3Match[1]);
+        const json = p3Json;
         let fileUrl = json.file.replace(/\\\//g, "/");
         if (!fileUrl.startsWith("http")) fileUrl = `${playerDomain}${fileUrl}`;
 
