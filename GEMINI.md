@@ -24,7 +24,12 @@ This document defines the mandatory patterns and architectural standards for all
 - **Centralized Keys:** Use the project-wide `TMDB_API_KEY` (439c478a771f35c05022f9feabcca01c) for all metadata lookups.
 - **Database Lookup:** Prefer using the `enc-dec.app` database endpoints (`/db/kai/find`, `/db/flix/find`) over manual searching when a direct TMDB/MAL mapping is available.
 
-### 5. Stremio Compatibility
+### 5. Meta-Aggregators & External APIs
+- **IMDb Mapping:** When integrating meta-aggregators (like WebStreamr), always resolve the IMDb ID from TMDB first, as most aggregators use IMDb as their primary key for accuracy.
+- **AniList Integration:** For anime scrapers, use the AniList GraphQL API to map TMDB titles to AniList IDs to access specialized anime providers.
+- **Clean Presentation:** Scrapers that aggregate multiple sources must surgically clean the `name` and `title` fields to prevent UI clutter in Stremio. Use concise prefixes (e.g., `WS |` for WebStreamr).
+
+### 6. Stremio Compatibility
 - **Result Format:** Ensure all returned streams include `name`, `title`, `url`, and `quality`.
 - **Binge Grouping:** Always provide `behaviorHints.bingeGroup` using the format `providerName-serverType` (e.g., `animekai-sub`) to ensure Stremio groups streams correctly.
 - **Normalization:** Map incoming `series` types to `tv` for internal scraper logic to match TMDB standards.
@@ -40,4 +45,7 @@ Scrapers should follow the established "Step" logging pattern for rapid debuggin
 ## Legacy Scrapers & Refactoring
 - **Context:** Many scrapers (e.g., `vixsrc.js`, `4khdhub.js`) are adapted from `nuvio-providers` and use legacy `fetch` or regex-based extraction.
 - **Refactoring Mandate:** When modifying a legacy scraper, prioritize refactoring it to use `got-scraping`, `cheerio`, and the `rid` logging pattern.
-- **Gold Standards:** Refer to `src/scrapers/animekai.js` and `src/scrapers/yflix.js` as reference implementations for modern standards.
+- **Gold Standards:** 
+    - **Anime/Decryption:** `src/scrapers/animekai.js`
+    - **Database/HTML Parsing:** `src/scrapers/yflix.js`
+    - **Meta-Aggregators:** `src/scrapers/webstreamr.js`
