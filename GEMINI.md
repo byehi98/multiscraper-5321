@@ -20,6 +20,7 @@ This document defines the mandatory patterns and architectural standards for all
 - **Robust Selectors:** Use attribute-based selectors (e.g., `[data-lid]`) where available, as they are less likely to change than CSS class names.
 
 ### 4. API Interaction (enc-dec.app)
+- **Reference:** Use `enc_dec_endpoints.json` as the primary reference for all encryption/decryption and database endpoints.
 - **Throttling:** Implement a small delay (min 200ms) between rapid consecutive calls to `enc-dec.app` to avoid `500 Internal Server Error` rate limits.
 - **Centralized Keys:** Use the project-wide `TMDB_API_KEY` (439c478a771f35c05022f9feabcca01c) for all metadata lookups.
 - **Database Lookup:** Prefer using the `enc-dec.app` database endpoints (`/db/kai/find`, `/db/flix/find`) over manual searching when a direct TMDB/MAL mapping is available.
@@ -33,6 +34,15 @@ This document defines the mandatory patterns and architectural standards for all
 - **Result Format:** Ensure all returned streams include `name`, `title`, `url`, and `quality`.
 - **Binge Grouping:** Always provide `behaviorHints.bingeGroup` using the format `providerName-serverType` (e.g., `animekai-sub`) to ensure Stremio groups streams correctly.
 - **Normalization:** Map incoming `series` types to `tv` for internal scraper logic to match TMDB standards.
+
+## Vercel Deployment & Runtime
+- **Safe Loading:** Scrapers MUST be loaded via the `safeLoad` pattern in `src/index.js` to ensure they are detected and bundled correctly by Vercel's build process.
+- **Base URL:** Always use the `BASE_URL` helper (which checks `process.env.VERCEL_URL`) for static assets and manifest URLs.
+- **IMDb-to-TMDB Helper:** Use the shared `imdbToTmdb` helper in `src/index.js` to handle ID conversions consistently.
+
+## Scraper-Specific Configurations
+- **CastleTV:** Requires a valid `CASTLE_SUFFIX` (found in CNCVerse build files) for AES decryption. If this key is rotated, decryption will fail globally.
+- **StreamFlix:** Uses a WebSocket-based approach for episode metadata retrieval; ensure the `ws` dependency is available for non-browser environments.
 
 ## Established Logging Pattern
 Scrapers should follow the established "Step" logging pattern for rapid debugging:

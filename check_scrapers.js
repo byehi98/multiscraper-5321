@@ -6,7 +6,7 @@ const files = [
   // "./src/scrapers/cinevibe",
   // "./src/scrapers/dahmermovies",
   // "./src/scrapers/dvdplay",
-  // "./src/scrapers/hdhub4u",
+  "./src/scrapers/hdhub4u",
   // "./src/scrapers/hdrezka",
   // "./src/scrapers/mallumv",
   // "./src/scrapers/mint",
