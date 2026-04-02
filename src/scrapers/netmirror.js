@@ -297,8 +297,10 @@ async function getStreamingLinks(contentId, title, platform, rid) {
     });
 
     const playlist = response.body;
+    const userAgent = response.request.options.headers['user-agent'];
+
     if (!Array.isArray(playlist) || playlist.length === 0) {
-        return { sources: [], subtitles: [] };
+        return { sources: [], subtitles: [], cookie, userAgent };
     }
 
     const sources = [];
@@ -328,7 +330,7 @@ async function getStreamingLinks(contentId, title, platform, rid) {
             });
         }
     });
-    return { sources, subtitles, cookie };
+    return { sources, subtitles, cookie, userAgent };
 }
 
 function calculateSimilarity(str1, str2) {
@@ -430,11 +432,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                         quality,
                         behaviorHints: {
                             bingeGroup: `netmirror-${platform}`,
+                            notWebReady: true,
                             proxyHeaders: {
                                 request: {
-                                    "User-Agent": "Mozilla/5.0 (Android) ExoPlayer",
+                                    "User-Agent": streamData.userAgent,
                                     "Referer": `${NETMIRROR_PLAY}/`,
-                                    "Cookie": `t_hash_t=${streamData.cookie}; hd=on`
+                                    "Origin": NETMIRROR_PLAY,
+                                    "Cookie": `t_hash_t=${streamData.cookie}; hd=on`,
+                                    "Accept": "*/*",
+                                    "Accept-Language": "en-US,en;q=0.9",
+                                    "Connection": "keep-alive"
                                 }
                             }
                         }
