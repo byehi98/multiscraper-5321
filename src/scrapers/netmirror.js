@@ -328,7 +328,7 @@ async function getStreamingLinks(contentId, title, platform, rid) {
             });
         }
     });
-    return { sources, subtitles };
+    return { sources, subtitles, cookie };
 }
 
 function calculateSimilarity(str1, str2) {
@@ -434,7 +434,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                                 request: {
                                     "User-Agent": "Mozilla/5.0 (Android) ExoPlayer",
                                     "Referer": `${NETMIRROR_PLAY}/`,
-                                    "Cookie": "hd=on"
+                                    "Cookie": `t_hash_t=${streamData.cookie}; hd=on`
                                 }
                             }
                         }
